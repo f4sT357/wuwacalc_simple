@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="鳴潮（Wuthering Waves）の音骸（Echo）のスコアを計算・評価するためのツール。OCR機能、手動入力、キャラクター別設定に対応。">
+    <meta name="author" content="WuwaCalc">
+    <title>鳴潮 音骸スコア計算機 / Wuthering Waves Echo Score Calculator</title>
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --text-color: #333;
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --white: #ffffff;
+            --light-gray: #f8f9fa;
+            --border-gray: #e0e0e0;
+            --note-bg: #fff3cd;
+            --note-border: #ffc107;
+            --warning-bg: #f8d7da;
+            --warning-border: #dc3545;
+            --code-bg: #f4f4f4;
+            --code-color: #e83e8c;
+            --link-hover: #764ba2;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+            --text-shadow: rgba(0, 0, 0, 0.2);
+        }
+
+        /* Reset */
+        body,
+        h1,
+        h2,
+        h3,
+        h4,
+        p,
+        ul,
+        ol {
+            margin: 0;
+            padding: 0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px var(--shadow-color);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            color: var(--white);
+            padding: 40px;
+            text-align: center;
+            position: relative;
+        }
+
+        header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px var(--text-shadow);
+        }
+
+        .lang-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid var(--white);
+            border-radius: 25px;
+            padding: 8px 20px;
+            color: var(--white);
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+
+        .lang-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        main {
+            padding: 40px;
+        }
+
+        .language-section {
+            display: none;
+        }
+
+        .language-section.active {
+            display: block;
+        }
+
+        section {
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: var(--primary-color);
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid var(--primary-color);
+        }
+
+        h3 {
+            color: var(--secondary-color);
+            font-size: 1.4em;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        h4 {
+            color: #555;
+            font-size: 1.1em;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin-bottom: 15px;
+        }
+
+        ul,
+        ol {
+            margin-left: 30px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .feature-list {
+            background: var(--light-gray);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .feature-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-gray);
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list strong {
+            color: var(--primary-color);
+        }
+
+        .setup-steps {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 25px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .setup-steps ol {
+            margin-left: 20px;
+        }
+
+        .setup-steps li {
+            margin-bottom: 15px;
+            padding-left: 10px;
+        }
+
+        .note {
+            background: var(--note-bg);
+            border-left: 4px solid var(--note-border);
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .warning {
+            background: var(--warning-bg);
+            border-left: 4px solid var(--warning-border);
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        code {
+            background: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--code-color);
+        }
+
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        a:hover {
+            color: var(--link-hover);
+            text-decoration: underline;
+        }
+
+        .divider {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+            margin: 50px 0;
+        }
+
+        .reference-item {
+            margin-bottom: 20px;
+        }
+
+        .reference-source {
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        .reference-desc {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.5em;
+            }
+
+            .lang-toggle {
+                position: static;
+                display: block;
+                margin: 15px auto 0;
+                width: fit-content;
+            }
+
+            main {
+                padding: 20px;
+            }
+
+            h2 {
+                font-size: 1.4em;
+            }
+
+            h3 {
+                font-size: 1.2em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            header {
+                padding: 20px;
+            }
+
+            header h1 {
+                font-size: 1.2em;
+            }
+
+            main {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🌊 鳴潮 音骸スコア計算機<br>Wuthering Waves Echo Score Calculator</h1>
+            <button class="lang-toggle" onclick="toggleLanguage()" aria-label="言語切り替え / Toggle Language">
+                <span id="lang-button-text">English</span>
+            </button>
+        </header>
+
+        <main>
+            <div id="ja-section" class="language-section active">
+                <h2>📖 日本語</h2>
+
+                <section>
+                    <h3>概要</h3>
+                    <p>鳴潮（Wuthering Waves）の音骸（Echo）のスコアを計算・評価するためのツールです。</p>
+                    <p>OCR機能（画像認識）による自動入力と手動入力の両方に対応しています。キャラクター別の重み付け設定も利用可能です。</p>
+                </section>
+
+                <section>
+                    <h3>機能</h3>
+                    <div class="feature-list">
+                        <ul>
+                            <li><strong>スコア計算</strong>: 4つの評価方法（正規化、比率重視、ロール品質、有効ステータス数）で評価します。</li>
+                            <li><strong>OCR入力</strong>: スクリーンショットやクリップボードの画像からステータスを自動で読み取ります。</li>
+                            <li><strong>一括計算</strong>: 登録されている複数の音骸を一括で評価します。</li>
+                            <li><strong>キャラクター設定</strong>: 各キャラクターに固有の有効なサブステータスと重み付け設定を保存・管理できます。</li>
+                            <li><strong>外観カスタマイズ</strong>:
+                                テーマの変更や背景画像の設定が可能です。背景画像はアプリケーションと同じフォルダに置くことで、フォルダ移動時も設定が維持されます（相対パス対応）。<br>
+                                詳細なカスタマイズ方法は <a href="appearance_help.html" target="_blank">外観カスタマイズガイド (Appearance
+                                    Customization Guide)</a> をご覧ください。</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>計算の参照元</h3>
+                    <p>このツールの音骸スコア計算式は、以下のコミュニティリソースに基づいています：</p>
+
+                    <div class="feature-list">
+                        <ul>
+                            <li class="reference-item">
+                                <strong>方式1: 正規化スコア (GameWith式)</strong><br>
+                                <a href="https://gamewith.jp/naminami/article/show/452825" target="_blank"
+                                    rel="noopener noreferrer">GameWith - 鳴潮 残響厳選チェッカー</a><br>
+                                <span class="reference-desc">メインオプションに15ポイント＋サブオプションに最大100ポイントを割り当てる評価方法</span>
+                            </li>
+                            <li class="reference-item">
+                                <strong>方式2: 比率重視方式 (Keisan式)</strong><br>
+                                <a href="https://keisan.casio.jp/exec/user/1717922007" target="_blank"
+                                    rel="noopener noreferrer">CASIO - 鳴潮 残響スコア計算機</a><br>
+                                <span class="reference-source">主要参考元:
+                                    <a href="https://wikiwiki.jp/w-w/" target="_blank"
+                                        rel="noopener noreferrer">wikiwiki</a> /
+                                    <a href="https://wutheringwaves.fandom.com/wiki/Damage#Damage_Calculation"
+                                        target="_blank" rel="noopener noreferrer">wutheringwaves.fandom.com</a>
+                                </span><br>
+                                <span class="reference-desc">サブステータスの比率に焦点を当てた計算方法</span>
+                            </li>
+                            <li class="reference-item">
+                                <strong>方式3: ロール品質方式</strong><br>
+                                <span class="reference-desc">各サブステータスの数値品質（最高/良/低）を評価</span>
+                            </li>
+                            <li class="reference-item">
+                                <strong>方式4: 有効ステータス数方式</strong><br>
+                                <span class="reference-desc">有効なサブステータスの数をカウント</span>
+                            </li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>重み付け設定ガイド</h3>
+                    <p>このツールでは、複数の計算ロジックに共通の「重み」設定を使用しますが、重みの扱いは方法によって異なります。
+                        すべての方法で正確な評価を行うために、以下の推奨事項に従ってください。</p>
+
+                    <div class="note">
+                        <h4>推奨設定</h4>
+                        <ul>
+                            <li><strong>必須ステータス (例: 会心率/会心ダメージ)</strong>: <code>1.0</code> に設定します。</li>
+                            <li><strong>有効ステータス (例: 攻撃力%)</strong>: <code>0.5</code> 以上 (例: <code>0.7</code> ~
+                                <code>1.0</code>) に設定します。
+                                <ul>
+                                    <li>⚠️ <strong>注意</strong>: 「有効ステータス数方式」では、重みが <code>0.5</code>
+                                        未満のステータスは「有効」と見なされません。</li>
+                                </ul>
+                            </li>
+                            <li><strong>ボーナスステータス</strong>: <code>0.1</code> ~ <code>0.4</code> に設定します。
+                                <ul>
+                                    <li>「正規化スコア」には加算されますが、「有効ステータス数方式」には含まれません。</li>
+                                </ul>
+                            </li>
+                            <li><strong>不要なステータス</strong>: <code>0</code> に設定します。</li>
+                        </ul>
+                    </div>
+
+                    <h4>各計算方式における重みの扱い</h4>
+                    <p>4つの計算方式は、それぞれ異なる方法で重み係数を使用します。各方式の特徴を理解することで、より適切な重み設定が可能になります。</p>
+
+                    <div class="feature-list">
+                        <h4>方式1: 正規化スコア (GameWith式)</h4>
+                        <p><strong>重みの役割:</strong> サブステータスの価値を直接的に反映します。</p>
+                        <ul>
+                            <li><strong>計算方法:</strong> 各サブステータスを最大値で正規化（0-1の範囲）し、重み係数を掛けて合計します。</li>
+                            <li><strong>重みの影響:</strong> 重みが大きいほど、そのステータスがスコアに与える影響が大きくなります。</li>
+                            <li><strong>推奨設定:</strong>
+                                <ul>
+                                    <li>最重要ステータス（会心率/会心ダメージ）: <code>1.0</code></li>
+                                    <li>重要ステータス（攻撃力%、共鳴効率など）: <code>0.7</code> ~ <code>0.9</code></li>
+                                    <li>やや有効なステータス（属性ダメージアップなど）: <code>0.3</code> ~ <code>0.6</code></li>
+                                    <li>不要なステータス（防御力など）: <code>0</code></li>
+                                </ul>
+                            </li>
+                            <li><strong>特徴:</strong> すべてのサブステータスが重みに応じてスコアに加算されるため、バランスの取れた評価が可能です。</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-list">
+                        <h4>方式2: 比率重視方式 (Keisan式)</h4>
+                        <p><strong>重みの役割:</strong> ダメージ計算における各ステータスの重要度を表します。</p>
+                        <ul>
+                            <li><strong>計算方法:</strong> サブステータスの比率（実際の値 / 最大値）に重み係数を掛けて合計します。</li>
+                            <li><strong>重みの影響:</strong> ダメージ計算式における各ステータスの寄与度を反映します。</li>
+                            <li><strong>推奨設定:</strong>
+                                <ul>
+                                    <li>会心率: <code>1.0</code> （基準値）</li>
+                                    <li>会心ダメージ: <code>1.0</code> （会心率と同等の重要度）</li>
+                                    <li>攻撃力%: <code>0.8</code> ~ <code>1.0</code> （キャラクターの基礎攻撃力に依存）</li>
+                                    <li>共鳴効率: <code>0.5</code> ~ <code>0.8</code> （スキル回転率への影響）</li>
+                                    <li>属性ダメージアップ: <code>0.6</code> ~ <code>0.9</code> （ビルドによる）</li>
+                                </ul>
+                            </li>
+                            <li><strong>特徴:</strong> 実際のダメージ計算に近い評価が可能で、キャラクターのビルドに応じた細かい調整が重要です。</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-list">
+                        <h4>方式3: ロール品質方式</h4>
+                        <p><strong>重みの役割:</strong> 各ステータスの「引き」の価値を評価する際の重要度を表します。</p>
+                        <ul>
+                            <li><strong>計算方法:</strong> 各サブステータスの数値品質（最高/良/低）を判定し、品質ポイントに重み係数を掛けて合計します。</li>
+                            <li><strong>重みの影響:</strong> 高品質な引きがあった場合のスコアへの貢献度を決定します。</li>
+                            <li><strong>推奨設定:</strong>
+                                <ul>
+                                    <li>会心率/会心ダメージ: <code>1.0</code> （最高の引きを最大限評価）</li>
+                                    <li>攻撃力%: <code>0.8</code> ~ <code>1.0</code></li>
+                                    <li>共鳴効率: <code>0.7</code> ~ <code>0.9</code></li>
+                                    <li>その他の有効ステータス: <code>0.5</code> ~ <code>0.8</code></li>
+                                </ul>
+                            </li>
+                            <li><strong>特徴:</strong> サブステータスの「引きの強さ」を重視する評価方法です。重みが高いステータスで高品質な引きがあると、スコアが大きく上昇します。</li>
+                            <li><strong>注意:</strong> この方式では、会心率、会心ダメージ、共鳴効率、攻撃力%のみが評価対象です。</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-list">
+                        <h4>方式4: 有効ステータス数方式</h4>
+                        <p><strong>重みの役割:</strong> ステータスが「有効」かどうかを判定する閾値として機能します。</p>
+                        <ul>
+                            <li><strong>計算方法:</strong> 重みが <code>0.5</code>
+                                以上のステータスを「有効」としてカウントし、有効ステータス数に応じたボーナス倍率を適用します。</li>
+                            <li><strong>重みの影響:</strong>
+                                <ul>
+                                    <li><code>0.5</code> 以上: 有効ステータスとしてカウントされ、スコアに貢献します。</li>
+                                    <li><code>0.5</code> 未満: 無効と見なされ、スコアに貢献しません。</li>
+                                </ul>
+                            </li>
+                            <li><strong>推奨設定:</strong>
+                                <ul>
+                                    <li>必須ステータス（会心率/会心ダメージ）: <code>1.0</code></li>
+                                    <li>有効ステータス（攻撃力%、共鳴効率など）: <code>0.5</code> ~ <code>1.0</code></li>
+                                    <li>やや有効なステータス: <code>0.5</code> （ギリギリ有効としてカウント）</li>
+                                    <li>不要なステータス: <code>0</code> ~ <code>0.4</code> （有効としてカウントされない）</li>
+                                </ul>
+                            </li>
+                            <li><strong>特徴:</strong> 有効ステータスが5個揃うと最大1.2倍のボーナスが適用されます。重みの細かい数値よりも、<code>0.5</code>
+                                以上か未満かが重要です。</li>
+                            <li><strong>戦略:</strong> できるだけ多くのステータスを <code>0.5</code> 以上に設定することで、5個有効ステータスを狙いやすくなります。
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="warning">
+                        <h4>⚠️ 重要な注意事項</h4>
+                        <ul>
+                            <li><strong>共通の重み設定:</strong>
+                                このツールでは、すべての計算方式で同じ重み設定を使用します。そのため、すべての方式でバランスの取れた評価を得るには、上記の推奨設定を参考にしてください。</li>
+                            <li><strong>0.5の閾値:</strong> 「有効ステータス数方式」で有効と見なされるためには、重みを <code>0.5</code> 以上に設定する必要があります。
+                            </li>
+                            <li><strong>キャラクター別の調整:</strong> キャラクターのビルドやプレイスタイルに応じて、重み設定を調整することで、より正確な評価が可能になります。</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Tesseract OCRのセットアップ</h3>
+                    <p>OCR機能を使用するには、Tesseract OCRをインストールする必要があります。</p>
+                    <div class="setup-steps">
+                        <ol>
+                            <li>
+                                <strong>インストーラーのダウンロード</strong>
+                                <ul>
+                                    <li><a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank"
+                                            rel="noopener noreferrer">UB-Mannheim Tesseract Wiki</a> にアクセスします。
+                                    </li>
+                                    <li>最新の <code>tesseract-ocr-w64-setup-v5.x.x.xxxx.exe</code> (64ビット版) をダウンロードします。
+                                    </li>
+                                </ul>
+                            </li>
+                            <li>
+                                <strong>重要なインストール設定</strong>
+                                <ul>
+                                    <li>インストーラーを実行します。</li>
+                                    <li><strong>「コンポーネントの選択」</strong>画面で、日本語認識を有効にするために以下の項目がチェックされていることを確認してください：
+                                        <ul>
+                                            <li><code>Additional Script Data (download)</code> を展開 →
+                                                <strong><code>Japanese script</code></strong> にチェック
+                                            </li>
+                                            <li><code>Additional Language Data (download)</code> を展開 →
+                                                <strong><code>Japanese</code></strong> にチェック
+                                            </li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                                <div class="warning">
+                                    <strong>⚠️ 注意:</strong> これらの言語データファイルがないと、ツールは日本語テキストを認識できません。
+                                </div>
+                            </li>
+                            <li>
+                                <strong>完了</strong>
+                                <ul>
+                                    <li>デフォルトの場所 (<code>C:\Program Files\Tesseract-OCR</code>)
+                                        にインストールした場合、このツールは自動的に検出します。</li>
+                                    <li>それ以外の場所にインストールした場合は、インストールフォルダをWindowsの <code>PATH</code> 環境変数に追加してください。
+                                    </li>
+                                </ul>
+                            </li>
+                        </ol>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>使用方法</h3>
+                    <ol>
+                        <li><code>wuwacalc17.pyw</code> を実行します。</li>
+                        <li><strong>手動モード</strong>: 手動でステータスを入力し、「計算」ボタンをクリックします。</li>
+                        <li><strong>OCRモード</strong>: 「OCR」タブを選択し、画像を取り込むかクリップボードから貼り付けてテキストを認識させます。<br>
+                            <span style="font-size: 0.9em; color: #666;">※一括自動分類機能（複数枚読み込み）を使用する場合は、<strong>「コスト」の表示（COST
+                                    4など）を含めて</strong>画像を切り取ってください。コストが読み取れない場合、自動分類が正しく機能しないことがあります。</span>
+                        </li>
+                        <li><strong>キャラクター設定</strong>: 「キャラ設定」ボタンを使用して、特定のキャラクターのプリセットを作成/編集します。</li>
+                        <li><strong>ヘルプ</strong>: 「ヘルプ」ボタンをクリックして、このヘルプページを開きます。</li>
+                    </ol>
+                </section>
+            </div> <!-- /#ja-section -->
+
+            <div id="en-section" class="language-section">
+                <h2>📖 English</h2>
+
+                <section>
+                    <h3>Overview</h3>
+                    <p>A tool to calculate and evaluate Echo scores for Wuthering Waves.</p>
+                    <p>It supports automatic input via OCR (image recognition) and manual input. Character-specific
+                        weighting settings are also available.</p>
+                </section>
+
+                <section>
+                    <h3>Features</h3>
+                    <div class="feature-list">
+                        <ul>
+                            <li><strong>Score Calculation</strong>: Evaluates using 4 methods (Normalization, Ratio,
+                                Roll Quality, Effective Stats Count).</li>
+                            <li><strong>OCR Input</strong>: Automatically reads stats from screenshots or clipboard
+                                images.</li>
+                            <li><strong>Batch Calculation</strong>: Evaluates multiple registered Echoes at once.</li>
+                            <li><strong>Character Settings</strong>: Set and save effective sub-stats and weights for
+                                each character.</li>
+                            <li><strong>Customizable Appearance</strong>: Supports theme changes and custom background
+                                images. Placing images in the application folder maintains settings even if the folder
+                                is moved (relative path support).<br>
+                                For details, please refer to the <a href="appearance_help.html"
+                                    target="_blank">Appearance Customization Guide</a>.</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Calculation References</h3>
+                    <p>The Echo score calculation formulas used in this tool are based on the following community
+                        resources:</p>
+
+                    <div class="feature-list">
+                        <ul>
+                            <li class="reference-item">
+                                <strong>Method 1: Normalized Score (GameWith)</strong><br>
+                                <a href="https://gamewith.jp/naminami/article/show/452825" target="_blank"
+                                    rel="noopener noreferrer">GameWith - Wuthering Waves Echo Score Checker</a><br>
+                                <span class="reference-desc">Evaluation method with 15 points for Main Option + Max 100
+                                    points for Sub Options</span>
+                            </li>
+                            <li class="reference-item">
+                                <strong>Method 2: Ratio-focused Method (Keisan)</strong><br>
+                                <a href="https://keisan.casio.jp/exec/user/1717922007" target="_blank"
+                                    rel="noopener noreferrer">CASIO - Wuthering Waves Echo Score Calculator</a><br>
+                                <span class="reference-source">Primary Source:
+                                    <a href="https://wikiwiki.jp/w-w/" target="_blank"
+                                        rel="noopener noreferrer">wikiwiki</a> /
+                                    <a href="https://wutheringwaves.fandom.com/wiki/Damage#Damage_Calculation"
+                                        target="_blank" rel="noopener noreferrer">wutheringwaves.fandom.com</a>
+                                </span><br>
+                                <span class="reference-desc">Calculation method focusing on the ratio of
+                                    sub-stats</span>
+                            </li>
+                            <li class="reference-item">
+                                <strong>Method 3: Roll Quality Method</strong><br>
+                                <span class="reference-desc">Evaluates the numerical quality (Max/High/Low) of each
+                                    sub-stat</span>
+                            </li>
+                            <li class="reference-item">
+                                <strong>Method 4: Effective Stats Count</strong><br>
+                                <span class="reference-desc">Counts the number of effective sub-stats</span>
+                            </li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Weighting Settings Guide</h3>
+                    <p>This tool uses a common "Weight" setting for multiple calculation logics, but how weights are
+                        handled differs by method. Follow these recommendations to ensure accurate evaluations across
+                        all methods.</p>
+
+                    <div class="note">
+                        <h4>Recommended Settings</h4>
+                        <ul>
+                            <li><strong>Essential Stats (e.g., Crit Rate/DMG)</strong>: Set to <code>1.0</code>.</li>
+                            <li><strong>Effective Stats (e.g., Atk%)</strong>: Set to <code>0.5</code> or higher (e.g.,
+                                <code>0.7</code> ~ <code>1.0</code>).
+                                <ul>
+                                    <li>⚠️ <strong>Note</strong>: In "Effective Stats Count" method, stats with weight
+                                        less than <code>0.5</code> are NOT counted as "effective".</li>
+                                </ul>
+                            </li>
+                            <li><strong>Bonus Stats</strong>: Set to <code>0.1</code> ~ <code>0.4</code>.
+                                <ul>
+                                    <li>Added to "Normalized Score" but NOT included in "Effective Stats Count".</li>
+                                </ul>
+                            </li>
+                            <li><strong>Useless Stats</strong>: Set to <code>0</code>.</li>
+                        </ul>
+                    </div>
+
+                    <h4>How Each Calculation Method Uses Weights</h4>
+                    <p>The 4 calculation methods use weight coefficients in different ways. Understanding each method's
+                        characteristics allows for more appropriate weight settings.</p>
+
+                    <div class="feature-list">
+                        <h4>Method 1: Normalized Score (GameWith)</h4>
+                        <p><strong>Role of Weights:</strong> Directly reflects the value of substats.</p>
+                        <ul>
+                            <li><strong>Calculation:</strong> Each substat is normalized by its maximum value (0-1
+                                range), multiplied by the weight coefficient, and summed.</li>
+                            <li><strong>Weight Impact:</strong> Higher weights mean greater impact on the score.</li>
+                            <li><strong>Recommended Settings:</strong>
+                                <ul>
+                                    <li>Most Important Stats (Crit Rate/DMG): <code>1.0</code></li>
+                                    <li>Important Stats (ATK%, Energy Regen, etc.): <code>0.7</code> ~ <code>0.9</code>
+                                    </li>
+                                    <li>Somewhat Effective Stats (Elemental DMG Bonus, etc.): <code>0.3</code> ~
+                                        <code>0.6</code></li>
+                                    <li>Useless Stats (DEF, etc.): <code>0</code></li>
+                                </ul>
+                            </li>
+                            <li><strong>Characteristics:</strong> All substats contribute to the score according to
+                                their weights, enabling balanced evaluation.</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-list">
+                        <h4>Method 2: Ratio-focused Method (Keisan)</h4>
+                        <p><strong>Role of Weights:</strong> Represents the importance of each stat in damage
+                            calculation.</p>
+                        <ul>
+                            <li><strong>Calculation:</strong> The ratio of substats (actual value / max value) is
+                                multiplied by weight coefficients and summed.</li>
+                            <li><strong>Weight Impact:</strong> Reflects each stat's contribution in the damage formula.
+                            </li>
+                            <li><strong>Recommended Settings:</strong>
+                                <ul>
+                                    <li>Crit Rate: <code>1.0</code> (baseline)</li>
+                                    <li>Crit DMG: <code>1.0</code> (equal importance to Crit Rate)</li>
+                                    <li>ATK%: <code>0.8</code> ~ <code>1.0</code> (depends on character's base ATK)</li>
+                                    <li>Energy Regen: <code>0.5</code> ~ <code>0.8</code> (impact on skill rotation)
+                                    </li>
+                                    <li>Elemental DMG Bonus: <code>0.6</code> ~ <code>0.9</code> (depends on build)</li>
+                                </ul>
+                            </li>
+                            <li><strong>Characteristics:</strong> Enables evaluation close to actual damage calculation,
+                                with fine-tuning important based on character builds.</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-list">
+                        <h4>Method 3: Roll Quality Method</h4>
+                        <p><strong>Role of Weights:</strong> Represents the importance when evaluating the "roll" value
+                            of each stat.</p>
+                        <ul>
+                            <li><strong>Calculation:</strong> Judges the numerical quality (Max/High/Low) of each
+                                substat, multiplies quality points by weight coefficients, and sums.</li>
+                            <li><strong>Weight Impact:</strong> Determines the contribution to score when high-quality
+                                rolls occur.</li>
+                            <li><strong>Recommended Settings:</strong>
+                                <ul>
+                                    <li>Crit Rate/DMG: <code>1.0</code> (maximize evaluation of best rolls)</li>
+                                    <li>ATK%: <code>0.8</code> ~ <code>1.0</code></li>
+                                    <li>Energy Regen: <code>0.7</code> ~ <code>0.9</code></li>
+                                    <li>Other Effective Stats: <code>0.5</code> ~ <code>0.8</code></li>
+                                </ul>
+                            </li>
+                            <li><strong>Characteristics:</strong> Emphasizes the "strength of rolls" in substats.
+                                High-quality rolls on high-weight stats significantly increase the score.</li>
+                            <li><strong>Note:</strong> This method only evaluates Crit Rate, Crit DMG, Energy Regen, and
+                                ATK%.</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-list">
+                        <h4>Method 4: Effective Stats Count</h4>
+                        <p><strong>Role of Weights:</strong> Functions as a threshold to determine if a stat is
+                            "effective".</p>
+                        <ul>
+                            <li><strong>Calculation:</strong> Stats with weight <code>0.5</code> or higher are counted
+                                as "effective", and a bonus multiplier is applied based on the effective stat count.
+                            </li>
+                            <li><strong>Weight Impact:</strong>
+                                <ul>
+                                    <li><code>0.5</code> or higher: Counted as effective and contributes to score.</li>
+                                    <li>Less than <code>0.5</code>: Considered ineffective and does NOT contribute to
+                                        score.</li>
+                                </ul>
+                            </li>
+                            <li><strong>Recommended Settings:</strong>
+                                <ul>
+                                    <li>Essential Stats (Crit Rate/DMG): <code>1.0</code></li>
+                                    <li>Effective Stats (ATK%, Energy Regen, etc.): <code>0.5</code> ~ <code>1.0</code>
+                                    </li>
+                                    <li>Somewhat Effective Stats: <code>0.5</code> (barely counted as effective)</li>
+                                    <li>Useless Stats: <code>0</code> ~ <code>0.4</code> (NOT counted as effective)</li>
+                                </ul>
+                            </li>
+                            <li><strong>Characteristics:</strong> Maximum 1.2x bonus is applied when 5 effective stats
+                                are present. The <code>0.5</code> threshold is more important than fine-tuning exact
+                                weight values.</li>
+                            <li><strong>Strategy:</strong> Setting as many stats as possible to <code>0.5</code> or
+                                higher makes it easier to achieve 5 effective stats.</li>
+                        </ul>
+                    </div>
+
+                    <div class="warning">
+                        <h4>⚠️ Important Notes</h4>
+                        <ul>
+                            <li><strong>Common Weight Settings:</strong> This tool uses the same weight settings for all
+                                calculation methods. To achieve balanced evaluation across all methods, refer to the
+                                recommended settings above.</li>
+                            <li><strong>0.5 Threshold:</strong> To be considered effective in the "Effective Stats
+                                Count" method, weights must be set to <code>0.5</code> or higher.</li>
+                            <li><strong>Character-Specific Adjustments:</strong> Adjusting weight settings according to
+                                character builds and playstyles enables more accurate evaluation.</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Tesseract OCR Setup</h3>
+                    <p>To use the OCR feature, Tesseract OCR must be installed.</p>
+                    <div class="setup-steps">
+                        <ol>
+                            <li>
+                                <strong>Download Installer</strong>
+                                <ul>
+                                    <li>Visit the <a href="https://github.com/UB-Mannheim/tesseract/wiki"
+                                            target="_blank" rel="noopener noreferrer">UB-Mannheim Tesseract Wiki</a>.
+                                    </li>
+                                    <li>Download the latest <code>tesseract-ocr-w64-setup-v5.x.x.xxxx.exe</code> (64-bit
+                                        version).</li>
+                                </ul>
+                            </li>
+                            <li>
+                                <strong>Important Installation Settings</strong>
+                                <ul>
+                                    <li>Run the installer.</li>
+                                    <li>On the <strong>"Choose Components"</strong> screen, ensure you check the
+                                        following items to enable Japanese recognition:
+                                        <ul>
+                                            <li>Expand <code>Additional Script Data (download)</code> → Check
+                                                <strong><code>Japanese script</code></strong>
+                                            </li>
+                                            <li>Expand <code>Additional Language Data (download)</code> → Check
+                                                <strong><code>Japanese</code></strong>
+                                            </li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                                <div class="warning">
+                                    <strong>⚠️ Note:</strong> Without these language data files, the tool cannot
+                                    recognize Japanese text.
+                                </div>
+                            </li>
+                            <li>
+                                <strong>Completion</strong>
+                                <ul>
+                                    <li>If installed to the default location
+                                        (<code>C:\Program Files\Tesseract-OCR</code>), this tool will automatically
+                                        detect it.</li>
+                                    <li>If installed elsewhere, please add the installation folder to your Windows
+                                        <code>PATH</code> environment variable.
+                                    </li>
+                                </ul>
+                            </li>
+                        </ol>
+                    </div>
+                </section>
+
+                <section>
+                    <h3>Usage</h3>
+                    <ol>
+                        <li>Run <code>wuwacalc17.pyw</code>.</li>
+                        <li><strong>Manual Mode</strong>: Manually enter stats and click "Calculate" (計算).</li>
+                        <li><strong>OCR Mode</strong>: Select the "OCR" tab, then import or paste an image to recognize
+                            text.<br>
+                            <span style="font-size: 0.9em; color: #666;">* When using the batch auto-classification
+                                feature (loading multiple images), please ensure the crop area <strong>includes the
+                                    "Cost" display</strong> (e.g., COST 4). If the cost cannot be read,
+                                auto-classification may not work correctly.</span>
+                        </li>
+                        <li><strong>Character Settings</strong>: Use the "Character Settings" (キャラ設定) button to
+                            create/edit presets for specific characters.</li>
+                        <li><strong>Help</strong>: Click the "Help" (ヘルプ) button to open this help page.</li>
+                    </ol>
+                </section>
+            </div> <!-- /#en-section -->
+        </main>
+    </div>
+
+    <script>
+        // Language toggle functionality
+        let currentLang = 'ja'; // Default language from HTML
+
+        function updateButtonText() {
+            const buttonText = document.getElementById('lang-button-text');
+            if (currentLang === 'ja') {
+                buttonText.textContent = 'English'; // Button to switch to English
+            } else {
+                buttonText.textContent = '日本語'; // Button to switch to Japanese
+            }
+        }
+
+        function toggleLanguage() {
+            const jaSection = document.getElementById('ja-section');
+            const enSection = document.getElementById('en-section');
+            const htmlElement = document.documentElement;
+
+            if (currentLang === 'ja') {
+                jaSection.classList.remove('active');
+                enSection.classList.add('active');
+                htmlElement.setAttribute('lang', 'en');
+                currentLang = 'en';
+                localStorage.setItem('wuwacalc-lang', 'en');
+            } else { // currentLang is 'en'
+                enSection.classList.remove('active');
+                jaSection.classList.add('active');
+                htmlElement.setAttribute('lang', 'ja');
+                currentLang = 'ja';
+                localStorage.setItem('wuwacalc-lang', 'ja');
+            }
+            updateButtonText(); // Update button text after toggling
+        }
+
+        // Load saved language preference on page load
+        window.addEventListener('DOMContentLoaded', function () {
+            const savedLang = localStorage.getItem('wuwacalc-lang');
+
+            // Adjust currentLang based on saved preference if different from HTML default
+            if (savedLang && savedLang !== currentLang) {
+                // If savedLang is 'en' and current default is 'ja', or vice versa, toggle
+                toggleLanguage();
+            } else {
+                // If no savedLang or it matches the default 'ja', ensure UI is consistent with currentLang
+                const jaSection = document.getElementById('ja-section');
+                const enSection = document.getElementById('en-section');
+                if (currentLang === 'ja') {
+                    jaSection.classList.add('active');
+                    enSection.classList.remove('active');
+                } else { // currentLang is 'en'
+                    jaSection.classList.remove('active');
+                    enSection.classList.add('active');
+                }
+            }
+            updateButtonText(); // Ensure button text is correct on initial load
+        });
+
+        // Keyboard shortcut: Alt+L to toggle language
+        document.addEventListener('keydown', function (event) {
+            if (event.altKey && event.key === 'l') {
+                event.preventDefault();
+                toggleLanguage();
+            }
+        });
+    </script>
+</body>
+
+</html>

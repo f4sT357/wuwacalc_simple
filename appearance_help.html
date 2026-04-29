@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WuwaCalc Customization Guide</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #00bcd4;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --card-border: 1px solid rgba(255, 255, 255, 0.1);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(0, 188, 212, 0.1) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(156, 39, 176, 0.1) 0%, transparent 20%);
+            background-attachment: fixed;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #00bcd4, #9c27b0);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(0, 188, 212, 0.3);
+            animation: fadeInDown 1s ease-out;
+        }
+
+        .lang-toggle-container {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        .lang-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--accent-color);
+            border-radius: 20px;
+            padding: 8px 20px;
+            color: var(--accent-color);
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+
+        .lang-toggle:hover {
+            background: rgba(0, 188, 212, 0.2);
+            transform: scale(1.05);
+        }
+
+        h2 {
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 10px;
+            margin-top: 40px;
+            color: var(--accent-color);
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border: var(--card-border);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--glass-shadow);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeInUp 0.8s ease-out both;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px 0 rgba(0, 188, 212, 0.2);
+            border-color: rgba(0, 188, 212, 0.3);
+        }
+
+        .example-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent-color);
+            margin: 10px 0;
+        }
+
+        .warning-box {
+            background: rgba(255, 87, 34, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ff5722;
+            margin: 10px 0;
+            color: #ffccbc;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        strong {
+            color: #fff;
+        }
+
+        .language-section {
+            display: none;
+        }
+
+        .language-section.active {
+            display: block;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Stagger animations for cards */
+        .card:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+
+        .card:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .card:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        .card:nth-child(4) {
+            animation-delay: 0.4s;
+        }
+
+        .card:nth-child(5) {
+            animation-delay: 0.5s;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Appearance Customization Guide</h1>
+        <div class="lang-toggle-container">
+            <button class="lang-toggle" onclick="toggleLanguage()" aria-label="Toggle Language">
+                <span id="lang-button-text">English</span>
+            </button>
+        </div>
+
+        <!-- Japanese Section -->
+        <div id="ja-section" class="language-section active">
+            <div class="card">
+                <h2>🎨 基本設定 (Basic Settings)</h2>
+                <p>「表示設定 (Display Settings)」ダイアログから、アプリケーションの外観を自由にカスタマイズできます。</p>
+                <ul>
+                    <li><strong>テーマ設定 (Theme Settings)</strong>:
+                        <ul>
+                            <li><code>Dark</code>: デフォルトのダークモード。目に優しい配色です。</li>
+                            <li><code>Light</code>: 明るい配色。日中の利用に適しています。</li>
+                            <li><code>Clear</code>: 透明感を重視したテーマ。背景画像との相性が抜群です。</li>
+                        </ul>
+                    </li>
+                    <li><strong>背景画像 (Background Image)</strong>:
+                        お好きな画像 (PNG, JPG, BMP) を背景に設定できます。「画像を選択」ボタンからファイルを選んでください。
+                        <br>
+                        <div
+                            style="margin-top: 8px; padding: 8px; background: rgba(0, 188, 212, 0.15); border-left: 3px solid var(--accent-color); border-radius: 4px; font-size: 0.9em;">
+                            <strong>💡 ヒント (Relative Path):</strong><br>
+                            画像ファイルをアプリケーションと同じフォルダー（またはその中のフォルダー）に置いてから選択すると、設定が自動的に<strong>「相対パス」</strong>で保存されます。<br>
+                            これにより、ツールを入れたフォルダーごと別の場所に移動・コピーしても、背景画像の設定が維持されます。
+                        </div>
+                    </li>
+                    <li><strong>背景不透明度 (Opacity)</strong>:
+                        スライダーでウィンドウの透明度を調整できます。背景画像をどれくらい透かして見せるかをコントロールします。
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2>🌈 色のカスタマイズ (Color Customization)</h2>
+                <p>さらに詳細な色の調整が可能です。</p>
+                <ul>
+                    <li><strong>文字色 (Text Color)</strong>:
+                        背景画像によっては文字が見にくくなることがあります。その場合は、文字色を変更して視認性を高めてください。
+                    </li>
+                    <li><strong>入力欄の背景色 (Input Background Color)</strong>:
+                        ドロップダウンメニューやテキストボックスの背景色を個別に変更できます。
+                        「リセット」ボタンを押すと、テーマのデフォルト色に戻ります。
+                    </li>
+                    <li><strong>フォント設定 (Font Settings)</strong>:
+                        日本語対応フォントの中からお好きなフォントを選択できます。「システムデフォルト」を選ぶと元のフォントに戻ります。
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2>💡 設定例 (Setting Examples)</h2>
+
+                <div class="example-box">
+                    <strong>ナイトモード (Night Mode)</strong><br>
+                    テーマ: <code>Dark</code><br>
+                    不透明度: <code>90% - 95%</code><br>
+                    入力欄背景: <code>#121212</code> (超ダークグレー)<br>
+                    効果: 非常に暗い環境でも目が疲れにくい設定です。
+                </div>
+
+                <div class="example-box">
+                    <strong>グラス・モーフィズム (Glassmorphism)</strong><br>
+                    テーマ: <code>Clear</code><br>
+                    背景画像: <code>風景や抽象的な画像</code><br>
+                    不透明度: <code>70% - 80%</code><br>
+                    効果: 背景が適度に透けて見え、近未来的でスタイリッシュな外観になります。
+                </div>
+
+                <div class="example-box">
+                    <strong>ハイコントラスト (High Contrast)</strong><br>
+                    テーマ: <code>Dark</code><br>
+                    文字色: <code>#Yellow</code> (黄色) や <code>#Cyan</code> (水色)<br>
+                    入力欄背景: <code>#000000</code> (黒)<br>
+                    効果: 視認性を極限まで高めたい場合に有効です。
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>⚠️ 注意点 (Precautions)</h2>
+                <div class="warning-box">
+                    <ul>
+                        <li><strong>視認性について</strong>:
+                            背景画像が複雑すぎたり、文字色と背景色が似ていると、文字が読みづらくなることがあります。不透明度や文字色を調整して、見やすさを確保してください。</li>
+                        <li><strong>画像サイズ</strong>: 高解像度すぎる画像を使用すると、アプリケーションの動作が重くなる可能性があります。適切なサイズ（フルHD程度）の画像をおすすめします。
+                        </li>
+                        <li><strong>設定の失敗</strong>: 色の設定がおかしくなって元に戻せなくなった場合は、「表示設定を全リセット (Reset All Display
+                            Settings)」ボタンを押してください。すべての設定が初期状態に戻ります。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- English Section -->
+        <div id="en-section" class="language-section">
+            <div class="card">
+                <h2>🎨 Basic Settings</h2>
+                <p>You can freely customize the application's appearance from the "Display Settings" dialog.</p>
+                <ul>
+                    <li><strong>Theme Settings</strong>:
+                        <ul>
+                            <li><code>Dark</code>: Default dark mode. Easy on the eyes.</li>
+                            <li><code>Light</code>: Bright color scheme. Suitable for daytime use.</li>
+                            <li><code>Clear</code>: Transparency-focused theme. Great match for background images.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Background Image</strong>:
+                        You can set your favorite image (PNG, JPG, BMP) as the background. Select a file using the
+                        "Select Image" button.
+                        <br>
+                        <div
+                            style="margin-top: 8px; padding: 8px; background: rgba(0, 188, 212, 0.15); border-left: 3px solid var(--accent-color); border-radius: 4px; font-size: 0.9em;">
+                            <strong>💡 Tip (Relative Path):</strong><br>
+                            If you place the image file in the same folder as the application (or a subfolder inside it)
+                            before selecting it, the setting is automatically saved as a <strong>relative
+                                path</strong>.<br>
+                            This allows the background image setting to be maintained even if you move or copy the
+                            entire tool folder to another location.
+                        </div>
+                    </li>
+                    <li><strong>Background Opacity</strong>:
+                        You can adjust the window transparency with the slider. Controls how much the background image
+                        shows through.
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2>🌈 Color Customization</h2>
+                <p>More detailed color adjustments are possible.</p>
+                <ul>
+                    <li><strong>Text Color</strong>:
+                        Depending on the background image, text might become hard to read. In that case, change the text
+                        color to improve visibility.
+                    </li>
+                    <li><strong>Input Background Color</strong>:
+                        You can individually change the background color of drop-down menus and text boxes.
+                        Pressing the "Reset" button reverts it to the theme's default color.
+                    </li>
+                    <li><strong>Font Settings</strong>:
+                        You can choose from compatible fonts. Selecting "System Default" returns to the original font.
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2>💡 Setting Examples</h2>
+
+                <div class="example-box">
+                    <strong>Night Mode</strong><br>
+                    Theme: <code>Dark</code><br>
+                    Opacity: <code>90% - 95%</code><br>
+                    Input Background: <code>#121212</code> (Ultra Dark Gray)<br>
+                    Effect: Settings that reduce eye strain even in very dark environments.
+                </div>
+
+                <div class="example-box">
+                    <strong>Glassmorphism</strong><br>
+                    Theme: <code>Clear</code><br>
+                    Background Image: <code>Landscapes or abstract images</code><br>
+                    Opacity: <code>70% - 80%</code><br>
+                    Effect: The background shows through moderately, creating a futuristic and stylish look.
+                </div>
+
+                <div class="example-box">
+                    <strong>High Contrast</strong><br>
+                    Theme: <code>Dark</code><br>
+                    Text Color: <code>#Yellow</code> or <code>#Cyan</code><br>
+                    Input Background: <code>#000000</code> (Black)<br>
+                    Effect: Effective when you want to maximize visibility.
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>⚠️ Precautions</h2>
+                <div class="warning-box">
+                    <ul>
+                        <li><strong>Visibility</strong>:
+                            If the background image is too complex or the text color is similar to the background color,
+                            text may become difficult to read. Adjust opacity and text color to ensure readability.</li>
+                        <li><strong>Image Size</strong>: Using images with overly high resolutions may slow down the
+                            application. We recommend images of appropriate size (around Full HD).</li>
+                        <li><strong>Configuration Errors</strong>: If color settings become strange and you cannot
+                            revert them, please press the "Reset All Display Settings" button. All settings will return
+                            to their initial state.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 40px; opacity: 0.7; font-size: 0.9rem;">
+            WuwaCalc App - Designed for Wuthering Waves Players
+        </div>
+    </div>
+
+    <script>
+        // Language toggle functionality
+        let currentLang = 'ja'; // Default language
+
+        function updateButtonText() {
+            const buttonText = document.getElementById('lang-button-text');
+            if (currentLang === 'ja') {
+                buttonText.textContent = 'English'; // Button to switch to English
+            } else {
+                buttonText.textContent = '日本語'; // Button to switch to Japanese
+            }
+        }
+
+        function toggleLanguage() {
+            const jaSection = document.getElementById('ja-section');
+            const enSection = document.getElementById('en-section');
+            const htmlElement = document.documentElement;
+
+            if (currentLang === 'ja') {
+                jaSection.classList.remove('active');
+                enSection.classList.add('active');
+                htmlElement.setAttribute('lang', 'en');
+                currentLang = 'en';
+                localStorage.setItem('wuwacalc-lang', 'en');
+            } else { // currentLang is 'en'
+                enSection.classList.remove('active');
+                jaSection.classList.add('active');
+                htmlElement.setAttribute('lang', 'ja');
+                currentLang = 'ja';
+                localStorage.setItem('wuwacalc-lang', 'ja');
+            }
+            updateButtonText();
+        }
+
+        // Load saved language preference on page load
+        window.addEventListener('DOMContentLoaded', function () {
+            const savedLang = localStorage.getItem('wuwacalc-lang');
+
+            if (savedLang && savedLang !== currentLang) {
+                toggleLanguage();
+            } else {
+                // Ensure UI consistency if default
+                const jaSection = document.getElementById('ja-section');
+                const enSection = document.getElementById('en-section');
+                if (currentLang === 'ja') {
+                    jaSection.classList.add('active');
+                    enSection.classList.remove('active');
+                } else {
+                    jaSection.classList.remove('active');
+                    enSection.classList.add('active');
+                }
+            }
+            updateButtonText();
+        });
+    </script>
+</body>
+
+</html>

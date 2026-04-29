@@ -1,3 +1,62 @@
+# サードパーティライセンス詳細
+
+このドキュメントには、WuwaCalcで使用されているすべてのサードパーティライブラリの詳細なライセンス情報が含まれています。
+
+---
+
+## 目次
+1. [PyQt6](#1-pyqt6)
+2. [Tesseract OCR](#2-tesseract-ocr)
+3. [Pillow](#3-pillow)
+4. [pytesseract](#4-pytesseract)
+
+---
+
+## 1. PyQt6
+
+### 概要
+- **プロジェクト**: PyQt6
+- **バージョン**: 6.x
+- **ライセンス**: GNU General Public License v3 (GPL v3)
+- **著作権**: Copyright © Riverbank Computing Limited
+- **ウェブサイト**: https://www.riverbankcomputing.com/software/pyqt/
+- **用途**: グラフィカルユーザーインターフェース（GUI）フレームワーク
+
+### ライセンス情報
+PyQt6はGPL v3ライセンスの下で提供されています。このライセンスはコピーレフトライセンスであり、PyQt6を使用したアプリケーションもGPL v3の条項に従う必要があります。
+
+**GPL v3ライセンスの主な条項**:
+- ソースコードの開示義務
+- 派生物も同じライセンスで提供する必要がある
+- 非商用・商用問わず自由に使用可能
+- 改変・再配布が可能
+
+**完全なライセンステキスト**: https://www.gnu.org/licenses/gpl-3.0.html
+
+---
+
+## 2. Tesseract OCR
+
+### 概要
+- **プロジェクト**: Tesseract OCR
+- **バージョン**: 5.x
+- **ライセンス**: Apache License 2.0
+- **著作権**: Copyright © 2006-2024 Google Inc.
+- **ウェブサイト**: https://github.com/tesseract-ocr/tesseract
+- **用途**: 光学文字認識（OCR）エンジン
+
+### ライセンス情報
+Tesseract OCRはApache License 2.0の下で提供されています。
+
+**Apache License 2.0の主な条項**:
+- 商用・非商用問わず自由に使用可能
+- 改変・再配布が可能
+- ライセンスと著作権表示の保持が必要
+- 特許権の明示的な許諾
+
+### Apache License 2.0 全文
+
+```
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -174,28 +233,83 @@
       of your accepting any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
+```
 
-   APPENDIX: How to apply the Apache License to your work.
+---
 
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
+## 3. Pillow
 
-   Copyright [yyyy] [name of copyright owner]
+### 概要
+- **プロジェクト**: Pillow (PIL Fork)
+- **バージョン**: 10.x
+- **ライセンス**: Historical Permission Notice and Disclaimer (HPND)
+- **著作権**: Copyright © 2010-2024 by Jeffrey A. Clark (Alex) and contributors
+- **ウェブサイト**: https://python-pillow.org/
+- **用途**: Python画像処理ライブラリ
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+### ライセンス情報
 
-       http://www.apache.org/licenses/LICENSE-2.0
+```
+The Python Imaging Library (PIL) is
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+    Copyright © 1997-2011 by Secret Labs AB
+    Copyright © 1995-2011 by Fredrik Lundh
+
+Pillow is the friendly PIL fork. It is
+
+    Copyright © 2010-2024 by Jeffrey A. Clark (Alex) and contributors
+
+Like PIL, Pillow is licensed under the open source HPND License:
+
+By obtaining, using, and/or copying this software and/or its associated
+documentation, you agree that you have read, understood, and will comply
+with the following terms and conditions:
+
+Permission to use, copy, modify, and distribute this software and its
+associated documentation for any purpose and without fee is hereby granted,
+provided that the above copyright notice appears in all copies, and that
+both that copyright notice and this permission notice appear in supporting
+documentation, and that the name of Secret Labs AB or the author not be
+used in advertising or publicity pertaining to distribution of the software
+without specific, written prior permission.
+
+SECRET LABS AB AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
+SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS.
+IN NO EVENT SHALL SECRET LABS AB OR THE AUTHOR BE LIABLE FOR ANY SPECIAL,
+INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+```
+
+---
+
+## 4. pytesseract
+
+### 概要
+- **プロジェクト**: pytesseract
+- **バージョン**: 0.3.x
+- **ライセンス**: Apache License 2.0
+- **著作権**: Copyright © 2010-2024 Matthias A Lee and contributors
+- **ウェブサイト**: https://github.com/madmaze/pytesseract
+- **用途**: Tesseract OCRのPythonラッパー
+
+### ライセンス情報
+pytesseractはApache License 2.0の下で提供されています。
+完全なライセンステキストは上記の「2. Tesseract OCR」セクションを参照してください。
+
+---
+
+## ライセンス遵守について
+
+このアプリケーションは、上記のすべてのライブラリのライセンス条項を遵守しています：
+
+1. **著作権表示の保持**: すべてのライブラリの著作権表示を含めています
+2. **ライセンス通知**: 各ライブラリのライセンス情報を明記しています
+3. **GPL v3の遵守**: PyQt6のGPL v3ライセンスに従い、このアプリケーション全体もGPL v3の下で提供されます
+4. **Apache 2.0の遵守**: Tesseract OCRとpytesseractのApache License 2.0の条項を遵守しています
+5. **HPNDの遵守**: Pillowのライセンス条項を遵守しています
+
+---
+
+**最終更新日**: 2025年12月6日
