@@ -76,12 +76,11 @@ class EventHandlers:
         if text != self.app.language:
             self.app.language = text
             self.save_config()
-            QMessageBox.information(
-                self.app,
-                self.app.tr("language_changed_title"), 
-                self.app.tr("language_changed_message")
-            )
-            self.app.gui_log(f"Language changed to: {text} (will be fully applied after restart)")
+            
+            # Dynamic UI update
+            self.app.ui.retranslate_ui()
+            
+            self.app.gui_log(f"Language changed to: {text}")
     
     def on_mode_change(self, mode: str) -> None:
         """Handle input mode change."""

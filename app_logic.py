@@ -149,33 +149,10 @@ class AppLogic(QObject):
             if stat_found:
                 found_substats.append({"stat": stat_found, "value": num_found})
                 
-                stat_name_for_log = stat_found
-                if language == "en":
-                    log_stat_map = {
-                        "通常攻撃ダメージアップ": "Basic ATK DMG Bonus",
-                        "重撃ダメージアップ": "Heavy ATK DMG Bonus",
-                        "共鳴スキルダメージアップ": "Skill DMG Bonus",
-                        "共鳴解放ダメージアップ": "Liberation DMG Bonus",
-                        "クリティカル率": "Crit Rate",
-                        "クリティカルダメージ": "Crit DMG",
-                        "共鳴効率": "Energy Regen",
-                        "攻撃力%": "ATK%",
-                        "HP%": "HP%",
-                        "防御力%": "DEF%",
-                        "攻撃力": "ATK",
-                        "HP": "HP",
-                        "防御力": "DEF",
-                        "焦熱ダメージアップ": "Fusion DMG Bonus",
-                        "凝縮ダメージアップ": "Glacio DMG Bonus",
-                        "電導ダメージアップ": "Electro DMG Bonus",
-                        "気動ダメージアップ": "Aero DMG Bonus",
-                        "回折ダメージアップ": "Spectro DMG Bonus",
-                        "消滅ダメージアップ": "Havoc DMG Bonus",
-                        "HP回復効果アップ": "Healing Bonus",
-                    }
-                    stat_name_for_log = log_stat_map.get(stat_found, stat_found)
+                # Use the translation system for logs
+                stat_name_for_log = self.tr(stat_found)
                 
-                log_messages.append(f"OCR auto-fill: Sub{i+1} -> {stat_name_for_log} {num_found}{'%' if is_percent else ''}")
+                log_messages.append(self.tr("ocr_auto_fill_success", i+1, stat_name_for_log, num_found, "%" if is_percent else ""))
         
         return found_substats, log_messages
 

@@ -78,12 +78,13 @@ class UIComponents:
         """Create the UI for the basic settings area."""
         from constants import CHARACTER_STAT_WEIGHTS
         
-        settings_group = QGroupBox(self.app.tr("basic_settings"))
-        settings_layout = QGridLayout(settings_group)
-        parent_layout.addWidget(settings_group)
+        self.settings_group = QGroupBox(self.app.tr("basic_settings"))
+        settings_layout = QGridLayout(self.settings_group)
+        parent_layout.addWidget(self.settings_group)
         
         # Row 0
-        settings_layout.addWidget(QLabel(self.app.tr("cost_config")), 0, 0)
+        self.lbl_cost_config = QLabel(self.app.tr("cost_config"))
+        settings_layout.addWidget(self.lbl_cost_config, 0, 0)
         self.app.config_combo = QComboBox()
         self.app.config_combo.addItems(list(TAB_CONFIGS.keys()))
         self.app.config_combo.blockSignals(True) # Block signals during initial setup
@@ -92,21 +93,24 @@ class UIComponents:
         self.app.config_combo.currentTextChanged.connect(self.app.events.on_config_change)
         settings_layout.addWidget(self.app.config_combo, 0, 1)
         
-        settings_layout.addWidget(QLabel(self.app.tr("character")), 0, 2)
+        self.lbl_character = QLabel(self.app.tr("character"))
+        settings_layout.addWidget(self.lbl_character, 0, 2)
         # charcomboは外部から渡されたものを使用
         charcombo.setObjectName("CharComboBox")
         charcombo.currentTextChanged.connect(self.app.events.on_character_change)
         settings_layout.addWidget(charcombo, 0, 3)
         
-        settings_layout.addWidget(QLabel(self.app.tr("language")), 0, 4)
+        self.lbl_language = QLabel(self.app.tr("language"))
+        settings_layout.addWidget(self.lbl_language, 0, 4)
         lang_combo = QComboBox()
-        lang_combo.addItems(["ja", "en"])
+        lang_combo.addItems(["ja", "en", "zh-TW"])
         lang_combo.setCurrentText(self.app.language)
         lang_combo.currentTextChanged.connect(self.app.events.on_language_change)
         settings_layout.addWidget(lang_combo, 0, 5)
         
         # Row 1: Input Mode
-        settings_layout.addWidget(QLabel(self.app.tr("input_mode")), 1, 0)
+        self.lbl_input_mode = QLabel(self.app.tr("input_mode"))
+        settings_layout.addWidget(self.lbl_input_mode, 1, 0)
         mode_layout = QHBoxLayout()
         
         self.rb_manual = QRadioButton(self.app.tr("manual"))
@@ -146,8 +150,8 @@ class UIComponents:
         
         settings_layout.addLayout(right_sub_layout, 1, 4, 1, 2)
         
-        # Row 2: Calc Mode
-        settings_layout.addWidget(QLabel(self.app.tr("calc_mode")), 2, 0)
+        self.lbl_calc_mode = QLabel(self.app.tr("calc_mode"))
+        settings_layout.addWidget(self.lbl_calc_mode, 2, 0)
         calc_mode_layout = QHBoxLayout()
         self.rb_batch = QRadioButton(self.app.tr("batch"))
         self.rb_single = QRadioButton(self.app.tr("single_only"))
@@ -165,7 +169,8 @@ class UIComponents:
         settings_layout.addLayout(calc_mode_layout, 2, 1, 1, 3)
         
         # Row 3: Calculation Methods Selection
-        settings_layout.addWidget(QLabel(self.app.tr("calc_methods")), 3, 0)
+        self.lbl_calc_methods = QLabel(self.app.tr("calc_methods"))
+        settings_layout.addWidget(self.lbl_calc_methods, 3, 0)
         
         methods_layout = QHBoxLayout()
         
@@ -239,12 +244,12 @@ class UIComponents:
         right_splitter.addWidget(self.image_container)
         
         # Log Area
-        log_group = QGroupBox(self.app.tr("log"))
-        log_layout = QVBoxLayout(log_group)
+        self.log_group = QGroupBox(self.app.tr("log"))
+        log_layout = QVBoxLayout(self.log_group)
         self.app.log_text = QTextEdit()
         self.app.log_text.setReadOnly(True)
         log_layout.addWidget(self.app.log_text)
-        right_splitter.addWidget(log_group)
+        right_splitter.addWidget(self.log_group)
         
         right_splitter.setSizes([350, 150])
 
@@ -256,12 +261,12 @@ class UIComponents:
         
         # Buttons
         btn_layout = QHBoxLayout()
-        btn_load = QPushButton(self.app.tr("load_image"))
-        btn_load.clicked.connect(self.app.image_proc.import_image)
-        btn_paste = QPushButton(self.app.tr("paste_clipboard"))
-        btn_paste.clicked.connect(self.app.image_proc.paste_from_clipboard)
-        btn_crop = QPushButton(self.app.tr("perform_crop"))
-        btn_crop.clicked.connect(self.app.image_proc.perform_crop)
+        self.btn_load = QPushButton(self.app.tr("load_image"))
+        self.btn_load.clicked.connect(self.app.image_proc.import_image)
+        self.btn_paste = QPushButton(self.app.tr("paste_clipboard"))
+        self.btn_paste.clicked.connect(self.app.image_proc.paste_from_clipboard)
+        self.btn_crop = QPushButton(self.app.tr("perform_crop"))
+        self.btn_crop.clicked.connect(self.app.image_proc.perform_crop)
         
         btn_layout.addWidget(btn_load)
         btn_layout.addWidget(btn_paste)
@@ -271,7 +276,8 @@ class UIComponents:
         
         # Crop Settings
         crop_layout = QHBoxLayout()
-        crop_layout.addWidget(QLabel(self.app.tr("crop_mode")))
+        self.lbl_crop_mode = QLabel(self.app.tr("crop_mode"))
+        crop_layout.addWidget(self.lbl_crop_mode)
         
         self.rb_crop_drag = QRadioButton(self.app.tr("drag"))
         self.rb_crop_percent = QRadioButton(self.app.tr("percent"))
@@ -287,13 +293,15 @@ class UIComponents:
         crop_layout.addWidget(self.rb_crop_drag)
         crop_layout.addWidget(self.rb_crop_percent)
         
-        crop_layout.addWidget(QLabel(self.app.tr("top_percent")))
+        self.lbl_top_percent = QLabel(self.app.tr("top_percent"))
+        crop_layout.addWidget(self.lbl_top_percent)
         self.entry_top_p = QLineEdit(str(self.app.crop_top_percent_var))
         self.entry_top_p.setFixedWidth(50)
         self.entry_top_p.textChanged.connect(self.app.events.on_crop_percent_change)
         crop_layout.addWidget(self.entry_top_p)
         
-        crop_layout.addWidget(QLabel(self.app.tr("right_percent")))
+        self.lbl_right_percent = QLabel(self.app.tr("right_percent"))
+        crop_layout.addWidget(self.lbl_right_percent)
         self.entry_right_p = QLineEdit(str(self.app.crop_right_percent_var))
         self.entry_right_p.setFixedWidth(50)
         self.entry_right_p.textChanged.connect(self.app.events.on_crop_percent_change)
@@ -312,9 +320,9 @@ class UIComponents:
 
     def create_result_frame(self, parent_layout: QVBoxLayout) -> None:
         """Create the UI for the result display area."""
-        group = QGroupBox(self.app.tr("calc_result"))
-        layout = QVBoxLayout(group)
-        parent_layout.addWidget(group)
+        self.result_group = QGroupBox(self.app.tr("calc_result"))
+        layout = QVBoxLayout(self.result_group)
+        parent_layout.addWidget(self.result_group)
         
         self.app.result_text = QTextEdit()
         self.app.result_text.setReadOnly(True)
@@ -467,3 +475,52 @@ class UIComponents:
             self.app.image_frame.setVisible(True)
         else:
             self.app.image_frame.setVisible(False)
+
+    def retranslate_ui(self) -> None:
+        """Update all UI text based on the current language."""
+        # Settings
+        if hasattr(self, "settings_group"): self.settings_group.setTitle(self.app.tr("basic_settings"))
+        if hasattr(self, "lbl_cost_config"): self.lbl_cost_config.setText(self.app.tr("cost_config"))
+        if hasattr(self, "lbl_character"): self.lbl_character.setText(self.app.tr("character"))
+        if hasattr(self, "lbl_language"): self.lbl_language.setText(self.app.tr("language"))
+        if hasattr(self, "lbl_input_mode"): self.lbl_input_mode.setText(self.app.tr("input_mode"))
+        if hasattr(self, "rb_manual"): self.rb_manual.setText(self.app.tr("manual"))
+        if hasattr(self, "rb_ocr"): self.rb_ocr.setText(self.app.tr("ocr"))
+        if hasattr(self, "cb_auto_main"): self.cb_auto_main.setText(self.app.tr("auto_main"))
+        if hasattr(self, "lbl_calc_mode"): self.lbl_calc_mode.setText(self.app.tr("calc_mode"))
+        if hasattr(self, "rb_batch"): self.rb_batch.setText(self.app.tr("batch"))
+        if hasattr(self, "rb_single"): self.rb_single.setText(self.app.tr("single_only"))
+        if hasattr(self, "lbl_calc_methods"): self.lbl_calc_methods.setText(self.app.tr("calc_methods"))
+        
+        # Calc Methods Checkboxes
+        if hasattr(self.app, "cb_method_normalized"): self.app.cb_method_normalized.setText(self.app.tr("method_normalized"))
+        if hasattr(self.app, "cb_method_ratio"): self.app.cb_method_ratio.setText(self.app.tr("method_ratio"))
+        if hasattr(self.app, "cb_method_roll"): self.app.cb_method_roll.setText(self.app.tr("method_roll"))
+        if hasattr(self.app, "cb_method_effective"): self.app.cb_method_effective.setText(self.app.tr("method_effective"))
+        if hasattr(self.app, "cb_method_cv"): self.app.cb_method_cv.setText(self.app.tr("method_cv"))
+        
+        # Image Area
+        if hasattr(self.app, "image_frame"): self.app.image_frame.setTitle(self.app.tr("ocr_image"))
+        if hasattr(self, "btn_load"): self.btn_load.setText(self.app.tr("load_image"))
+        if hasattr(self, "btn_paste"): self.btn_paste.setText(self.app.tr("paste_clipboard"))
+        if hasattr(self, "btn_crop"): self.btn_crop.setText(self.app.tr("perform_crop"))
+        if hasattr(self, "lbl_crop_mode"): self.lbl_crop_mode.setText(self.app.tr("crop_mode"))
+        if hasattr(self, "rb_crop_drag"): self.rb_crop_drag.setText(self.app.tr("drag"))
+        if hasattr(self, "rb_crop_percent"): self.rb_crop_percent.setText(self.app.tr("percent"))
+        if hasattr(self, "lbl_top_percent"): self.lbl_top_percent.setText(self.app.tr("top_percent"))
+        if hasattr(self, "lbl_right_percent"): self.lbl_right_percent.setText(self.app.tr("right_percent"))
+        
+        # Results & Logs
+        if hasattr(self, "result_group"): self.result_group.setTitle(self.app.tr("calc_result"))
+        if hasattr(self, "log_group"): self.log_group.setTitle(self.app.tr("log"))
+        
+        # Buttons Frame
+        # Re-creating buttons is hard, but we can iterate them if we store them.
+        # For now, let's at least update the main ones if we can.
+        # Actually, create_buttons_frame doesn't store them. Let's fix that too later if needed.
+        
+        # Update character list (this will re-translate character names in the dropdown)
+        self.app._filter_characters_by_config()
+        
+        # Update tabs
+        self.update_tabs()

@@ -22,6 +22,7 @@ from constants import (
     SUBSTAT_TYPES,
     TAB_CONFIGS,
     get_char_internal_name,
+    get_char_japanese_name,
     THEME_COLORS,
     LOG_FILENAME,
     CONFIG_FILENAME
@@ -31,14 +32,6 @@ from echo_data import EchoData
 from languages import TRANSLATIONS
 from utils import crop_image_by_percent, get_app_path, get_substat_display, setup_tesseract
 
-def get_char_japanese_name(char_name_en: str) -> str:
-    """
-    Retrieves the Japanese name for a given English character name from the TRANSLATIONS dictionary.
-    Falls back to the English name if no Japanese translation is found.
-    """
-    # Look up the Japanese translation within the 'ja' part of TRANSLATIONS
-    # The character names are directly keys in the 'ja' dictionary.
-    return TRANSLATIONS.get("ja", {}).get(char_name_en, char_name_en)
 
 
 # Import new modules
@@ -345,8 +338,17 @@ class ScoreCalculatorApp(QMainWindow):
         """)
 
     def tr(self, key: str, *args: Any) -> str:
-        """Translate a key."""
-        text = TRANSLATIONS.get(self.language, TRANSLATIONS["ja"]).get(key, key)
+        """
+        Translate a key with fallback to Japanese and then the key itself.
+        """
+        # 1. Try target language
+        lang_dict = TRANSLATIONS.get(self.language, {})
+        text = lang_dict.get(key)
+        
+        # 2. Fallback to Japanese
+        if text is None:
+            text = TRANSLATIONS.get("ja", {}).get(key, key)
+            
         if args:
             try:
                 return text.format(*args)
@@ -671,11 +673,11 @@ class ScoreCalculatorApp(QMainWindow):
             
             items_to_add = []
             if allowed:
-                # Use get_char_japanese_name for display name
-                items_to_add = sorted([(get_char_japanese_name(char_name), char_name) for char_name in allowed], key=lambda x: x[0])
+                # Use self.tr for translated display name
+                items_to_add = sorted([(self.tr(char_name), char_name) for char_name in allowed], key=lambda x: x[0])
             else:
-                # Use get_char_japanese_name for display name for all available characters
-                items_to_add = sorted([(get_char_japanese_name(char_name), char_name) for char_name in CHARACTER_STAT_WEIGHTS.keys()], key=lambda x: x[0])
+                # Use self.tr for translated display name for all available characters
+                items_to_add = sorted([(self.tr(char_name), char_name) for char_name in CHARACTER_STAT_WEIGHTS.keys()], key=lambda x: x[0])
             
             current_internal_name = self.character_var
             self._update_char_combobox(items_to_add, current_internal_name)
