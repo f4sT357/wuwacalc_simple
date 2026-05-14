@@ -141,8 +141,6 @@ class UIComponents:
         self.cb_auto_main.toggled.connect(self.app.events.on_auto_main_change)
         right_sub_layout.addWidget(self.cb_auto_main)
         
-        right_sub_layout.addWidget(self.cb_auto_main)
-        
         # Theme button moved to display settings
         # btn_theme = QPushButton(self.app.tr("theme"))
         # btn_theme.clicked.connect(self.app.events.cycle_theme)
@@ -223,10 +221,12 @@ class UIComponents:
             ("help", self.app._open_readme),
             ("display_settings", self.app.open_display_settings)
         ]
+        self.action_buttons = {}
         for key, command in buttons:
             btn = QPushButton(self.app.tr(key))
             btn.clicked.connect(command)
             btn_layout.addWidget(btn)
+            self.action_buttons[key] = btn
         
         btn_layout.addStretch() # Push buttons to left
 
@@ -268,9 +268,9 @@ class UIComponents:
         self.btn_crop = QPushButton(self.app.tr("perform_crop"))
         self.btn_crop.clicked.connect(self.app.image_proc.perform_crop)
         
-        btn_layout.addWidget(btn_load)
-        btn_layout.addWidget(btn_paste)
-        btn_layout.addWidget(btn_crop)
+        btn_layout.addWidget(self.btn_load)
+        btn_layout.addWidget(self.btn_paste)
+        btn_layout.addWidget(self.btn_crop)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
         
@@ -515,9 +515,9 @@ class UIComponents:
         if hasattr(self, "log_group"): self.log_group.setTitle(self.app.tr("log"))
         
         # Buttons Frame
-        # Re-creating buttons is hard, but we can iterate them if we store them.
-        # For now, let's at least update the main ones if we can.
-        # Actually, create_buttons_frame doesn't store them. Let's fix that too later if needed.
+        if hasattr(self, "action_buttons"):
+            for key, btn in self.action_buttons.items():
+                btn.setText(self.app.tr(key))
         
         # Update character list (this will re-translate character names in the dropdown)
         self.app._filter_characters_by_config()
