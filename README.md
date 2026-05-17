@@ -3,7 +3,8 @@
 鳴潮（Wuthering Waves）の音骸（Echo）のスコアを計算・評価するためのデスクトップアプリケーションです。
 OCR機能（画像認識）による自動入力と、複数の評価アルゴリズムによる詳細なスコアリングに対応しています。
 
-![Main UI](https://github.com/f4sT357/wuwacalc_simple/raw/main/appearance_help_images/main_preview.png) *(プレースホルダー: 実際の画像がある場合は差し替えてください)*
+![Main UI](<img width="1919" height="1124" alt="スクリーンショット 2026-05-18 004655" src="https://github.com/user-attachments/assets/ea1e0ff0-decf-4213-a17e-ac9f62d1b978" />
+) *(プレースホルダー: 実際の画像がある場合は差し替えてください)*
 
 ##  主な機能
 
