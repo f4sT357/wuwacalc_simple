@@ -92,7 +92,10 @@ STAT_ALIASES = {
 
 TAB_CONFIGS = {
     "43311": ["cost4_echo", "cost3_echo_1", "cost3_echo_2", "cost1_echo_1", "cost1_echo_2"],
-    "44111": ["cost4_echo_1", "cost4_echo_2", "cost1_echo_1", "cost1_echo_2", "cost1_echo_3"]
+    "カンタレラ": "Cantarella",
+    "ツバキ": "Tsubaki",
+    "長離": "Changli",
+    "汎用": "General",
 }
 
 # Character name mapping: Japanese -> English internal identifier

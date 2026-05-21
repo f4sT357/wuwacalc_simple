@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QComboBox, QPushButton, QGroupBox, 
                              QMessageBox, QWidget, QRubberBand, QSizePolicy, QColorDialog,
                              QFileDialog, QSlider)
-from PyQt6.QtCore import Qt, QRect, QSize, QPoint, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QSize, QPoint
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QColor, QPen, QFontDatabase, QFont
 
 # ImageQt should be imported from PIL.ImageQt
@@ -198,8 +198,6 @@ class CharSettingDialog(QDialog):
 
 class CropLabel(QLabel):
     """QLabel with rubber band selection."""
-    selection_changed = pyqtSignal(QRect)  # emitted on every drag move and release
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.rubberBand = QRubberBand(QRubberBand.Shape.Rectangle, self)
@@ -216,15 +214,12 @@ class CropLabel(QLabel):
 
     def mouseMoveEvent(self, event):
         if self.is_selecting:
-            rect = QRect(self.origin, event.pos()).normalized()
-            self.rubberBand.setGeometry(rect)
-            self.selection_changed.emit(rect)
+            self.rubberBand.setGeometry(QRect(self.origin, event.pos()).normalized())
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_selecting = False
             self.current_rect = self.rubberBand.geometry()
-            self.selection_changed.emit(self.current_rect)
 
     def get_selection(self):
         return self.current_rect
@@ -270,26 +265,18 @@ class CropDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_reset = QPushButton(self.app.tr("reset"))
         btn_reset.clicked.connect(self._reset_selection)
-
+        
         btn_ok = QPushButton(self.app.tr("ok"))
         btn_ok.clicked.connect(self._ok)
-
+        
         btn_cancel = QPushButton(self.app.tr("cancel"))
         btn_cancel.clicked.connect(self.reject)
-
+        
         btn_layout.addWidget(btn_reset)
         btn_layout.addStretch()
         btn_layout.addWidget(btn_ok)
         btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
-
-        # Real-time coordinate display
-        self.coord_label = QLabel(self.app.tr("crop_no_selection"))
-        self.coord_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.coord_label)
-
-        # Connect signal
-        self.image_label.selection_changed.connect(self._on_selection_changed)
 
     def _load_and_display_image(self):
         if not self.pil_image or not is_pil_installed:
@@ -317,19 +304,6 @@ class CropDialog(QDialog):
         
         self.image_label.setPixmap(pixmap)
         self.image_label.setFixedSize(new_w, new_h) # Ensure label matches image size for correct coordinates
-
-    def _on_selection_changed(self, display_rect: QRect) -> None:
-        """Update coordinate label with original-image pixel coordinates."""
-        if display_rect.isEmpty():
-            self.coord_label.setText(self.app.tr("crop_no_selection"))
-            return
-        # Convert from display (scaled) coords to original image coords
-        sr = self.scale_ratio if self.scale_ratio > 0 else 1.0
-        x = int(display_rect.x() / sr)
-        y = int(display_rect.y() / sr)
-        w = int(display_rect.width() / sr)
-        h = int(display_rect.height() / sr)
-        self.coord_label.setText(f"x={x},  y={y}   |   {w} × {h} px")
 
     def _reset_selection(self):
         self.image_label.rubberBand.hide()
