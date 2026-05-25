@@ -251,10 +251,7 @@ TRANSLATIONS = {
         "reset": "リセット",
         "full_reset": "全設定リセット",
         "confirm_full_reset": "すべての表示設定をリセットしてもよろしいですか？",
-        "help_customization": "カスタマイズガイド",
-        "font_settings": "フォント設定",
-        "font_family": "フォントファミリー:",
-        "default_font": "システムデフォルト",
+        
     },
     "en": {
         "app_title": "Wuthering Waves Echo Score Calculator",

@@ -5,17 +5,16 @@ Provides character setting and image cropping dialogs.
 """
 
 import os
-from typing import Callable, Optional, Any
+from typing import Callable
 
-from typing import Callable, Optional, Any
 from utils import get_app_path
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QLineEdit, QComboBox, QPushButton, QGroupBox, 
-                             QMessageBox, QWidget, QRubberBand, QSizePolicy, QColorDialog,
+                             QMessageBox, QWidget, QRubberBand, QColorDialog,
                              QFileDialog, QSlider)
 from PyQt6.QtCore import Qt, QRect, QSize, QPoint, pyqtSignal
-from PyQt6.QtGui import QPixmap, QImage, QPainter, QColor, QPen, QFontDatabase, QFont
+from PyQt6.QtGui import QPixmap, QColor, QFontDatabase
 
 # ImageQt should be imported from PIL.ImageQt
 try:
@@ -249,7 +248,7 @@ class CropDialog(QDialog):
         layout.addWidget(QLabel(self.app.tr("crop_instruction")))
         
         # Scroll Area for Image
-        scroll = QWidget() # Placeholder for scroll area content if needed, but QScrollArea takes a widget
+        # Placeholder removed; QScrollArea usage will create its own widget when needed
         # Actually, let's put the CropLabel inside a QScrollArea
         
         self.scroll_area = QWidget() # Just a container? No, QScrollArea
