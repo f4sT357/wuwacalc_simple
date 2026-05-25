@@ -55,30 +55,30 @@ def build():
             if os.path.exists(dest):
                 shutil.rmtree(dest)
             shutil.copytree("character_settings_jsons", dest)
-            print(f"  [OK] Copied character_settings_jsons.")
+            print("  [OK] Copied character_settings_jsons.")
         
         # Copy README.md and help
         if os.path.exists("README.html"):
             shutil.copy2("README.html", dist_dir)
-            print(f"  [OK] Copied README.html.")
+            print("  [OK] Copied README.html.")
             
         if os.path.exists("appearance_help.html"):
             shutil.copy2("appearance_help.html", dist_dir)
-            print(f"  [OK] Copied appearance_help.html.")
+            print("  [OK] Copied appearance_help.html.")
         
         # Copy config.json template (for initial setup)
         if os.path.exists("config.json"):
             shutil.copy2("config.json", dist_dir)
-            print(f"  [OK] Copied config.json.")
+            print("  [OK] Copied config.json.")
         
         # Copy license files
         if os.path.exists("LICENSE.md"):
             shutil.copy2("LICENSE.md", dist_dir)
-            print(f"  [OK] Copied LICENSE.md.")
+            print("  [OK] Copied LICENSE.md.")
         
         if os.path.exists("THIRD_PARTY_LICENSES.md"):
             shutil.copy2("THIRD_PARTY_LICENSES.md", dist_dir)
-            print(f"  [OK] Copied THIRD_PARTY_LICENSES.md.")
+            print("  [OK] Copied THIRD_PARTY_LICENSES.md.")
             
         print("\n" + "=" * 60)
         print("Ready for distribution!")

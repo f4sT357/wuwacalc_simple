@@ -9,7 +9,7 @@ import json
 import os
 import logging
 from dataclasses import dataclass, asdict, field
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ class AppConfig:
             
         # Validate enabled calculation methods
         if not isinstance(self.enabled_calc_methods, dict):
-            logger.warning(f"Invalid enabled_calc_methods type, resetting to defaults")
+            logger.warning("Invalid enabled_calc_methods type, resetting to defaults")
             self.enabled_calc_methods = {
                 "normalized": True, "ratio": True, "roll": True, "effective": True, "cv": True
             }

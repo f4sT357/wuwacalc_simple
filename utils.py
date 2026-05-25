@@ -2,9 +2,6 @@ import sys
 import os
 from PIL import Image
 import logging
-import sys
-import os
-import logging
 try:
     import pytesseract
 except ImportError:
