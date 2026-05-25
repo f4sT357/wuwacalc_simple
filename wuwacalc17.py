@@ -1,5 +1,6 @@
 import json
 import logging
+import logging.handlers
 import os
 import sys
 import webbrowser
@@ -52,6 +53,30 @@ from utils import crop_image_by_percent, get_app_path, get_substat_display, setu
 
 # Tesseract setup
 setup_tesseract()
+
+# Configure root logger for DEBUG with rotating file and console handlers
+try:
+    app_log_path = os.path.join(get_app_path(), LOG_FILENAME)
+except Exception:
+    app_log_path = LOG_FILENAME
+
+if not logging.root.handlers:
+    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    try:
+        rh = logging.handlers.RotatingFileHandler(app_log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
+        rh.setFormatter(fmt)
+        rh.setLevel(logging.DEBUG)
+        logging.root.addHandler(rh)
+    except Exception:
+        # Fallback: if file handler cannot be created, continue with console only
+        pass
+
+    ch = logging.StreamHandler()
+    ch.setFormatter(fmt)
+    ch.setLevel(logging.DEBUG)
+    logging.root.addHandler(ch)
+
+    logging.root.setLevel(logging.DEBUG)
 
 class CropOverlayLabel(QLabel):
     """QLabel that draws a crop-area overlay on top of the displayed pixmap.
@@ -149,6 +174,7 @@ class UIManager:
         self.config_manager = config_manager
         self.main_widget = None
         self.charcombo = QComboBox()
+        self.logger = logging.getLogger(__name__ + ".ui")
 
     def create_main_layout(self):
         """Construct the main UI layout."""
@@ -174,10 +200,20 @@ class ScoreCalculator:
     def __init__(self):
         pass
 
-    def calculate_single_score(self, substats, weights):
-        """Perform single score calculation."""
-        # Placeholder for actual calculation logic
-        return sum(substats.values()) * sum(weights.values())
+    def calculate_single_score(self, substats, weights, methods=None):
+        """Perform single score calculation.
+
+        `methods` is accepted for compatibility but not used by the placeholder logic.
+        """
+        try:
+            s_vals = sum(float(v) for v in substats.values()) if isinstance(substats, dict) else float(substats)
+        except Exception:
+            s_vals = 0.0
+        try:
+            w_vals = sum(float(v) for v in weights.values()) if isinstance(weights, dict) else float(weights)
+        except Exception:
+            w_vals = 0.0
+        return s_vals * w_vals
 
     def calculate_batch_scores(self, tabs):
         """Perform batch score calculations."""
@@ -193,13 +229,8 @@ class ScoreCalculatorApp(QMainWindow):
         
         # Initialize logger
         self.logger = logging.getLogger(__name__)
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(os.path.join(get_app_path(), LOG_FILENAME), encoding='utf-8'),
-                logging.StreamHandler()
-            ])
+        # Ensure module logger is at DEBUG level (root handlers configured above)
+        self.logger.setLevel(logging.DEBUG)
 
         self._init_config()
         self._init_vars()
@@ -581,9 +612,9 @@ class ScoreCalculatorApp(QMainWindow):
             
         config_key = self.current_config_key
         if config_key in TAB_CONFIGS:
-             keys = TAB_CONFIGS[config_key]
-             if index < len(keys):
-                 return keys[index]
+            keys = TAB_CONFIGS[config_key]
+            if index < len(keys):
+                return keys[index]
         return self.notebook.tabText(index)
     
     def show_tab_image(self, tab_name: str) -> None:
