@@ -4,25 +4,21 @@ import logging.handlers
 import os
 import sys
 import webbrowser
-import re
-import shutil
-import time
-import hashlib
-from typing import Any, Callable, Optional, Dict
+from typing import Any, Optional, Dict
 
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QStyleFactory, QComboBox,
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QScrollArea,
-    QTextEdit, QLabel, QPushButton, QCheckBox, QRadioButton, QGroupBox,
-    QSplitter, QFrame, QLineEdit, QFileDialog
+    QApplication, QMainWindow, QMessageBox, QComboBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget,
+    QCheckBox, QRadioButton, QGroupBox, QSplitter, QLineEdit, QFileDialog,
+    QLabel
 )
-from PyQt6.QtCore import Qt, QTimer, QRectF, pyqtSignal
-from PyQt6.QtGui import QIcon, QFont, QPixmap, QImage, QPainter, QColor, QPen
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QPixmap, QColor, QPainter, QPen
 
 try:
-    from PIL import Image, ImageOps, ImageEnhance, ImageQt, ImageGrab
-    is_pil_installed = True
-except ImportError:
+    import importlib.util
+    is_pil_installed = importlib.util.find_spec('PIL') is not None
+except Exception:
     is_pil_installed = False
 
 try:
@@ -36,23 +32,17 @@ from constants import (
     CHARACTER_MAIN_STATS,
     CHARACTER_STAT_WEIGHTS,
     MAIN_STAT_OPTIONS,
-    STAT_ALIASES,
     SUBSTAT_MAX_VALUES,
-    SUBSTAT_TYPES,
     TAB_CONFIGS,
     get_char_internal_name,
-    get_char_japanese_name,
     THEME_COLORS,
     LOG_FILENAME,
     CONFIG_FILENAME
 )
-from dialogs import CharSettingDialog, CropDialog, DisplaySettingsDialog
-from echo_data import EchoData
+from dialogs import CharSettingDialog, DisplaySettingsDialog
+from ui_components import UIComponents
 from languages import TRANSLATIONS
-from utils import crop_image_by_percent, get_app_path, get_substat_display, setup_tesseract
-
-# Tesseract setup
-setup_tesseract()
+from utils import get_app_path, setup_tesseract
 
 # Configure root logger for DEBUG with rotating file and console handlers
 try:
@@ -197,8 +187,39 @@ class UIManager:
 
 # New ScoreCalculator class for handling score calculations
 class ScoreCalculator:
-    def __init__(self):
-        pass
+    def __init__(self, app=None):
+        self.app = app
+
+    def calculate_all_scores(self):
+        """Calculate scores for the current tabs using the simplified calculator."""
+        if self.app is None:
+            return {}
+
+        tabs = {}
+        for tab_name, content in self.app.tabs_content.items():
+            substats = {}
+            for stat_widget, value_widget in content["sub_entries"]:
+                stat_name = stat_widget.currentText()
+                value_text = value_widget.text().strip()
+                if not stat_name or not value_text:
+                    continue
+                try:
+                    substats[stat_name] = float(value_text)
+                except ValueError:
+                    continue
+
+            tabs[tab_name] = {
+                "substats": substats,
+                "weights": CHARACTER_STAT_WEIGHTS.get(
+                    self.app.character_var, CHARACTER_STAT_WEIGHTS["General"]
+                ),
+                "methods": getattr(self.app.app_config, "enabled_calc_methods", {}),
+            }
+
+        results = self.calculate_batch_scores(tabs)
+        if getattr(self.app, "result_text", None) is not None:
+            self.app.result_text.setPlainText("\n".join(f"{key}: {value}" for key, value in results.items()))
+        return results
 
     def calculate_single_score(self, substats, weights, methods=None):
         """Perform single score calculation.
@@ -232,12 +253,21 @@ class ScoreCalculatorApp(QMainWindow):
         # Ensure module logger is at DEBUG level (root handlers configured above)
         self.logger.setLevel(logging.DEBUG)
 
+        # Default fallbacks to avoid AttributeError during partial initialization
+        self.language = 'ja'
+        self.character_var = ''
+        self.current_config_key = ''
+        self.mode_var = 'manual'
+        self.app_config = None
+
         self._init_config()
         self._init_vars()
+        self._current_app_theme = self.app_config.theme
 
-        # Initialize UIManager and ScoreCalculator
-        self.ui_manager = UIManager(self.app_config, self.config_manager)
-        self.score_calculator = ScoreCalculator()
+        # Initialize UI components and ScoreCalculator
+        self.ui_manager = UIComponents(self)
+        self.score_calculator = ScoreCalculator(self)
+        self.score_calc = self.score_calculator
 
         # UI construction
         self.ui_manager.create_main_layout()
@@ -251,13 +281,65 @@ class ScoreCalculatorApp(QMainWindow):
         config_path = os.path.join(get_app_path(), CONFIG_FILENAME)
         self.config_manager = ConfigManager(config_path)
         self.config_manager.load()
-        self.app_config = self.config_manager.get_app_config()
+        app_config = self.config_manager.get_app_config()
+        ui_config = self.config_manager.get_ui_config()
+
+        self.WINDOW_WIDTH = ui_config.window_width
+        self.WINDOW_HEIGHT = ui_config.window_height
+        self.RIGHT_TOP_HEIGHT = ui_config.right_top_height
+        self.LOG_MIN_HEIGHT = ui_config.log_min_height
+        self.LOG_DEFAULT_HEIGHT = ui_config.log_default_height
+        self.IMAGE_PREVIEW_MAX_WIDTH = ui_config.image_preview_max_width
+        self.IMAGE_PREVIEW_MAX_HEIGHT = ui_config.image_preview_max_height
+
+        self.language = app_config.language
+        self.crop_top_percent = app_config.crop_top_percent
+        self.crop_right_percent = app_config.crop_right_percent
+
+        self.app_config = app_config
 
     def _init_vars(self) -> None:
-        """Initialize variables."""
+        """Initialize UI-related variables."""
+        app_config = self.app_config
         self.tabs_content = {}
+
+        self.current_config_key = app_config.current_config_key
+        self.mode_var = app_config.mode_var
+
+        saved_char_name = app_config.character_var
+        if saved_char_name:
+            from constants import _CHAR_NAME_MAP_EN_TO_JP
+            if saved_char_name in _CHAR_NAME_MAP_EN_TO_JP:
+                self.character_var = saved_char_name
+            else:
+                self.character_var = get_char_internal_name(saved_char_name)
+        else:
+            self.character_var = ""
+
+        self.auto_apply_main_stats = app_config.auto_apply_main_stats
+        self.score_mode_var = app_config.score_mode_var
+        self._updating_tabs = False
+        self.crop_mode_var = app_config.crop_mode
+        self.crop_top_percent_var = app_config.crop_top_percent
+        self.crop_right_percent_var = app_config.crop_right_percent
+
         self.loaded_image = None
         self.original_image = None
+        self.image_label = None
+        self._image_preview = None
+        self._last_displayed_image_hash = None
+        self._last_image_preview = None
+        self._tab_images = {}
+
+        self._tab_results = {}
+        self._character_config_map = {}
+
+        # UI References (populated by UIManager)
+        self.result_text = None
+        self.log_text = None
+        self.notebook = None
+        self.charcombo = QComboBox()
+        self.config_combo = None
 
     def update_text_color(self, color):
         self.config_manager.update_app_setting("text_color", color)
@@ -525,7 +607,12 @@ class ScoreCalculatorApp(QMainWindow):
 
     def _post_init_setup(self) -> None:
         """Post-initialization setup."""
-        self.update_tabs()
+        # Ensure tabs exist; use a safe update_tabs implementation below
+        try:
+            self.update_tabs()
+        except Exception:
+            self.logger.debug("Safe update_tabs fallback will run", exc_info=True)
+            self._safe_update_tabs()
         self.update_ui_mode()
         self._load_character_profiles()
         self._filter_characters_by_config()
@@ -1031,3 +1118,128 @@ class ScoreCalculatorApp(QMainWindow):
         methods_layout.addStretch()
 
         settings_layout.addLayout(methods_layout, 3, 1, 1, 5)
+
+    def update_tabs(self) -> None:
+        """Delegate tab updating to UIManager if available, otherwise use safe fallback."""
+        if hasattr(self, 'ui_manager') and hasattr(self.ui_manager, 'update_tabs'):
+            return self.ui_manager.update_tabs()
+        return self._safe_update_tabs()
+
+    def _safe_update_tabs(self) -> None:
+        """Create minimal tabs so the UI can start without full tab logic implemented."""
+        try:
+            if not hasattr(self, 'notebook') or self.notebook is None:
+                self.notebook = QTabWidget()
+            self.notebook.clear()
+            self.tabs_content = {}
+            config_key = getattr(self, 'current_config_key', list(TAB_CONFIGS.keys())[0])
+            tab_names = TAB_CONFIGS.get(config_key, list(TAB_CONFIGS.values())[0])
+            for tab_name in tab_names:
+                page = QWidget()
+                layout = QVBoxLayout(page)
+                main_combo = QComboBox()
+                main_combo.addItems([self.tr(s) for s in MAIN_STAT_OPTIONS.get('4', [])])
+                layout.addWidget(main_combo)
+                sub_entries = []
+                for i in range(5):
+                    stat_combo = QComboBox()
+                    stat_combo.addItems([''] + [self.tr(s) for s in list(SUBSTAT_MAX_VALUES.keys())])
+                    val_entry = QLineEdit()
+                    row_widget = QWidget()
+                    row_layout = QHBoxLayout(row_widget)
+                    row_layout.addWidget(stat_combo)
+                    row_layout.addWidget(val_entry)
+                    layout.addWidget(row_widget)
+                    sub_entries.append((stat_combo, val_entry))
+                self.notebook.addTab(page, tab_name)
+                self.tabs_content[tab_name] = {
+                    'main_widget': main_combo,
+                    'sub_entries': sub_entries
+                }
+        except Exception:
+            self.logger.exception("Failed to create safe tabs")
+
+    def _load_character_profiles(self) -> None:
+        """Load character profile JSONs from the `character_settings_jsons` folder.
+
+        This is a lightweight loader used to initialize the character combobox.
+        """
+        try:
+            base = os.path.join(get_app_path(), 'character_settings_jsons')
+            items_to_add = []
+            config_map = {}
+            if os.path.isdir(base):
+                for fname in os.listdir(base):
+                    if not fname.lower().endswith('.json'):
+                        continue
+                    path = os.path.join(base, fname)
+                    try:
+                        with open(path, 'r', encoding='utf-8') as f:
+                            j = json.load(f)
+                        en = j.get('EN') or j.get('internal') or os.path.splitext(fname)[0]
+                        jp = j.get('JP') or j.get('name') or en
+                        items_to_add.append((self.tr(jp), en))
+                        config_map[en] = self.current_config_key
+                        self.logger.info("DEBUG: _load_character_profiles - Processing file: %s", fname)
+                        self.logger.info("DEBUG: _load_character_profiles - Initial from JSON: EN='%s', JP='%s'", en, jp)
+                    except Exception:
+                        self.logger.exception("Failed to read character file: %s", fname)
+            # Always include General
+            if 'General' not in [i[1] for i in items_to_add]:
+                items_to_add.append((self.tr('汎用'), 'General'))
+                config_map['General'] = self.current_config_key
+
+            self._character_config_map = config_map
+            self.gui_log("Character profiles loaded and map created.")
+            self._update_char_combobox(items_to_add, self.character_var)
+        except Exception:
+            self.logger.exception("_load_character_profiles failed")
+
+    def _filter_characters_by_config(self) -> None:
+        try:
+            current_key = getattr(self, 'current_config_key', None)
+            allowed = [name for name, cfg in self._character_config_map.items() if cfg == current_key]
+
+            items_to_add = []
+            if allowed:
+                items_to_add = sorted([(self.tr(char_name), char_name) for char_name in allowed], key=lambda x: x[0])
+            else:
+                items_to_add = sorted([(self.tr(char_name), char_name) for char_name in CHARACTER_STAT_WEIGHTS.keys()], key=lambda x: x[0])
+
+            current_internal_name = getattr(self, 'character_var', '')
+            self._update_char_combobox(items_to_add, current_internal_name)
+        except Exception as e:
+            self.logger.exception(f"Failed to filter characters by config: {e}")
+
+    def update_ui_mode(self) -> None:
+        """Update UI visibility based on current mode (ocr/manual)."""
+        try:
+            if getattr(self, 'mode_var', 'manual') == 'ocr':
+                if hasattr(self, 'image_frame') and self.image_frame is not None:
+                    self.image_frame.setVisible(True)
+            else:
+                if hasattr(self, 'image_frame') and self.image_frame is not None:
+                    self.image_frame.setVisible(False)
+        except Exception:
+            self.logger.exception("update_ui_mode failed")
+
+
+if __name__ == "__main__":
+    try:
+        # Ensure Tesseract is set up only when running the application, not on import
+        try:
+            setup_tesseract()
+        except Exception:
+            logging.getLogger(__name__).warning("setup_tesseract() failed at startup, continuing without OCR setup")
+
+        app = QApplication(sys.argv)
+        window = ScoreCalculatorApp()
+        window.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        logging.getLogger(__name__).critical("Critical unhandled exception during application startup: %s", e, exc_info=True)
+        try:
+            QMessageBox.critical(None, "Fatal Error", f"An unhandled error occurred during application startup:\n{e}\n\nCheck the log file for more details.")
+        except Exception:
+            pass
+        sys.exit(1)
