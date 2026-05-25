@@ -1,6 +1,6 @@
 
 import sys
-from PyQt6.QtWidgets import QApplication, QDialog, QRubberBand, QVBoxLayout, QLabel, QWidget
+from PyQt6.QtWidgets import QApplication, QDialog, QRubberBand
 from PyQt6.QtCore import Qt, QRect, QPoint, QSize
 
 class TestDialog(QDialog):

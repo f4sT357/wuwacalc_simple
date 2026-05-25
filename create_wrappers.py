@@ -103,5 +103,6 @@ wrapper_methods = """
 
 """
 
-print("Delegation wrapper methods:")
-print(wrapper_methods)
+if __name__ == '__main__':
+    print("Delegation wrapper methods:")
+    print(wrapper_methods)
