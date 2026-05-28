@@ -283,6 +283,83 @@ class ScoreCalculatorApp(QMainWindow):
         self._resize_preview_timer.timeout.connect(self._update_image_preview_on_resize)
 
         # Initialize UI components and ScoreCalculator
+        # Try to initialize application logic, tab manager and image processor (OCR).
+        # Prefer local modules; fall back to backup_before_refactor if present.
+        self.logic = None
+        self.image_proc = None
+        # Attempt to import TabManager from local or backup
+        TabManager = None
+        try:
+            from tab_manager import TabManager  # type: ignore
+        except Exception:
+            try:
+                from backup_before_refactor.tab_manager import TabManager  # type: ignore
+            except Exception:
+                TabManager = None
+
+        # Initialize TabManager if available so ImageProcessor can use it
+        if TabManager is not None:
+            try:
+                self.tab_mgr = TabManager(self)
+            except Exception:
+                # If instantiation fails, ensure attribute exists to avoid attribute errors
+                self.tab_mgr = None
+
+        try:
+            from app_logic import AppLogic  # type: ignore
+            from image_processor import ImageProcessor  # type: ignore
+            self.logic = AppLogic(self.tr)
+            # Ensure tab_mgr exists for image processor
+            if not hasattr(self, 'tab_mgr'):
+                try:
+                    from tab_manager import TabManager  # type: ignore
+                    self.tab_mgr = TabManager(self)
+                except Exception:
+                    self.tab_mgr = None
+            self.image_proc = ImageProcessor(self, self.logic)
+            # Connect logic signals
+            try:
+                self.logic.log_message.connect(self.gui_log)
+                self.logic.ocr_error.connect(self.show_ocr_error_message)
+                self.logic.info_message.connect(self.show_info_message)
+                self.logic.character_profile_saved.connect(self.on_character_profile_saved)
+            except Exception:
+                pass
+            # Connect image processor signal
+            try:
+                self.image_proc.ocr_completed.connect(self.on_ocr_completed)
+            except Exception:
+                pass
+            self.gui_log("AppLogic and ImageProcessor initialized.")
+        except Exception:
+            try:
+                from backup_before_refactor.app_logic import AppLogic  # type: ignore
+                from backup_before_refactor.image_processor import ImageProcessor  # type: ignore
+                self.logic = AppLogic(self.tr)
+                # Ensure tab_mgr exists (backup TabManager should be available)
+                if not hasattr(self, 'tab_mgr') or self.tab_mgr is None:
+                    try:
+                        from backup_before_refactor.tab_manager import TabManager  # type: ignore
+                        self.tab_mgr = TabManager(self)
+                    except Exception:
+                        self.tab_mgr = None
+                self.image_proc = ImageProcessor(self, self.logic)
+                try:
+                    self.logic.log_message.connect(self.gui_log)
+                    self.logic.ocr_error.connect(self.show_ocr_error_message)
+                    self.logic.info_message.connect(self.show_info_message)
+                    self.logic.character_profile_saved.connect(self.on_character_profile_saved)
+                except Exception:
+                    pass
+                try:
+                    self.image_proc.ocr_completed.connect(self.on_ocr_completed)
+                except Exception:
+                    pass
+                self.gui_log("AppLogic and ImageProcessor initialized (from backup).")
+            except Exception as e:
+                self.logger.debug(f"Image processor / logic modules not initialized: {e}", exc_info=True)
+                self.gui_log("OCR/Image processor not available; running with fallback handlers.")
+
         self.ui_manager = UIComponents(self)
         self.score_calculator = ScoreCalculator(self)
         self.score_calc = self.score_calculator
@@ -990,6 +1067,49 @@ class ScoreCalculatorApp(QMainWindow):
     def _update_image_preview_on_resize(self) -> None:
         if getattr(self, 'loaded_image', None) is not None:
             self.display_image_preview(self.loaded_image)
+
+    def import_image(self) -> None:
+        """Load image(s) from disk and apply initial crop/preview.
+
+        This is a minimal fallback used when the separate ImageProcessor
+        module is not present. It loads the first selected image and
+        applies the configured percent crop or keeps the full image.
+        """
+        if not is_pil_installed:
+            QMessageBox.critical(self, self.tr("error"), self.tr("pillow_required") if hasattr(self, 'tr') else "Pillow is not installed. Image operations require Pillow.")
+            return
+
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            self.tr("select_image"),
+            "",
+            "Image Files (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*.*)"
+        )
+        if not file_paths:
+            self.gui_log("Image selection was cancelled.")
+            return
+
+        try:
+            file_path = file_paths[0]
+            if not os.path.isfile(file_path):
+                QMessageBox.critical(self, self.tr("error"), f"File not found:\n{file_path}")
+                return
+
+            image = Image.open(file_path)
+            self.original_image = image.copy()
+
+            if getattr(self, 'crop_mode_var', 'drag') == 'percent':
+                top_p = getattr(self, 'crop_top_percent_var', 0)
+                right_p = getattr(self, 'crop_right_percent_var', 0)
+                cropped = crop_image_by_percent(self.original_image, top_p, right_p)
+            else:
+                cropped = self.original_image.copy()
+
+            self.apply_cropped_image(cropped)
+        except Exception as e:
+            QMessageBox.critical(self, self.tr("error"), f"Failed to load image(s):\n{e}")
+            self.logger.exception(f"Image load error: {e}")
+            self.gui_log(f"Image load error: {e}")
 
     def display_image_preview(self, image: Any) -> None:
         if not is_pil_installed or self.image_label is None or image is None:

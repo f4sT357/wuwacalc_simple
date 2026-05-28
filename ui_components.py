@@ -262,14 +262,21 @@ class UIComponents:
         # Buttons
         btn_layout = QHBoxLayout()
         self.btn_load = QPushButton(self.app.tr("load_image"))
+        # Connect to image processor if available, otherwise fall back to app-level handler
         if hasattr(self.app, "image_proc") and self.app.image_proc is not None:
             self.btn_load.clicked.connect(self.app.image_proc.import_image)
+        elif hasattr(self.app, "import_image"):
+            self.btn_load.clicked.connect(self.app.import_image)
         self.btn_paste = QPushButton(self.app.tr("paste_clipboard"))
         if hasattr(self.app, "image_proc") and self.app.image_proc is not None:
             self.btn_paste.clicked.connect(self.app.image_proc.paste_from_clipboard)
+        elif hasattr(self.app, "paste_from_clipboard"):
+            self.btn_paste.clicked.connect(self.app.paste_from_clipboard)
         self.btn_crop = QPushButton(self.app.tr("perform_crop"))
         if hasattr(self.app, "image_proc") and self.app.image_proc is not None:
             self.btn_crop.clicked.connect(self.app.image_proc.perform_crop)
+        elif hasattr(self.app, "perform_crop"):
+            self.btn_crop.clicked.connect(self.app.perform_crop)
         
         btn_layout.addWidget(self.btn_load)
         btn_layout.addWidget(self.btn_paste)
