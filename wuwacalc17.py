@@ -4,7 +4,11 @@ import logging.handlers
 import os
 import sys
 import webbrowser
+import hashlib
 from typing import Any, Optional, Dict
+
+IMAGE_PREVIEW_MAX_WIDTH = 400
+IMAGE_PREVIEW_MAX_HEIGHT = 200
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QComboBox,
@@ -16,6 +20,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap, QColor, QPainter, QPen
 
 try:
+    from PIL import Image, ImageQt
     import importlib.util
     is_pil_installed = importlib.util.find_spec('PIL') is not None
 except Exception:
@@ -39,10 +44,10 @@ from constants import (
     LOG_FILENAME,
     CONFIG_FILENAME
 )
-from dialogs import CharSettingDialog, DisplaySettingsDialog
+from dialogs import CharSettingDialog, DisplaySettingsDialog, CropDialog
 from ui_components import UIComponents
 from languages import TRANSLATIONS
-from utils import get_app_path, setup_tesseract
+from utils import get_app_path, setup_tesseract, crop_image_by_percent
 
 # Configure root logger for DEBUG with rotating file and console handlers
 try:
@@ -263,6 +268,19 @@ class ScoreCalculatorApp(QMainWindow):
         self._init_config()
         self._init_vars()
         self._current_app_theme = self.app_config.theme
+
+        # Initialize QTimer instances for save, crop preview, and resize preview
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.timeout.connect(self.actual_save_config)
+
+        self._crop_preview_timer = QTimer(self)
+        self._crop_preview_timer.setSingleShot(True)
+        self._crop_preview_timer.timeout.connect(self._update_crop_preview)
+
+        self._resize_preview_timer = QTimer(self)
+        self._resize_preview_timer.setSingleShot(True)
+        self._resize_preview_timer.timeout.connect(self._update_image_preview_on_resize)
 
         # Initialize UI components and ScoreCalculator
         self.ui_manager = UIComponents(self)
@@ -899,9 +917,9 @@ class ScoreCalculatorApp(QMainWindow):
 
     def on_crop_percent_change(self, text: str) -> None:
         try:
-            if self.entry_top_p == self.sender():
+            if self.ui_manager.entry_top_p == self.sender():
                 self.crop_top_percent_var = float(text)
-            elif self.entry_right_p == self.sender():
+            elif self.ui_manager.entry_right_p == self.sender():
                 self.crop_right_percent_var = float(text)
             
             self.save_config()
@@ -955,6 +973,121 @@ class ScoreCalculatorApp(QMainWindow):
     
     def schedule_image_preview_update_on_resize(self, *args: Any) -> None:
         self._resize_preview_timer.start(100)
+
+    def _update_crop_preview(self) -> None:
+        if self.original_image is None or self.image_label is None:
+            return
+        try:
+            top_p = self.crop_top_percent_var
+            right_p = self.crop_right_percent_var
+            
+            cropped = crop_image_by_percent(self.original_image, top_p, right_p)
+            
+            self.display_image_preview(cropped)
+        except Exception as e:
+            self.logger.debug(f"Crop preview error: {e}")
+
+    def _update_image_preview_on_resize(self) -> None:
+        if getattr(self, 'loaded_image', None) is not None:
+            self.display_image_preview(self.loaded_image)
+
+    def display_image_preview(self, image: Any) -> None:
+        if not is_pil_installed or self.image_label is None or image is None:
+            return
+        try:
+            image_hash_data = (image.mode, image.size, hashlib.md5(image.tobytes()).hexdigest())
+            
+            if hasattr(self, '_last_displayed_image_hash') and image_hash_data == self._last_displayed_image_hash and getattr(self, '_last_image_preview', None) is not None:
+                self.image_label.setPixmap(self._last_image_preview)
+                self.image_label.setText("")
+                return
+            
+            qim = ImageQt.ImageQt(image)
+            pixmap = QPixmap.fromImage(qim)
+            
+            scaled_pixmap = pixmap.scaled(
+                IMAGE_PREVIEW_MAX_WIDTH, 
+                IMAGE_PREVIEW_MAX_HEIGHT,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            
+            self._image_preview = scaled_pixmap
+            self._last_displayed_image_hash = image_hash_data
+            self._last_image_preview = scaled_pixmap
+            
+            self.image_label.setPixmap(scaled_pixmap)
+            self.image_label.setText("")
+        except Exception as e:
+            self.logger.exception(f"Image preview update error: {e}")
+            self.gui_log(f"Image preview update error: {e}")
+
+    def perform_crop(self) -> None:
+        if getattr(self, 'original_image', None) is None:
+            QMessageBox.warning(self, self.tr("warning"), self.tr("no_image_loaded"))
+            return
+        mode = self.crop_mode_var
+        if mode == "percent":
+            self.apply_percent_crop()
+        else:
+            self.open_crop_dialog()
+
+    def apply_percent_crop(self) -> None:
+        try:
+            top_p = self.crop_top_percent_var
+            right_p = self.crop_right_percent_var
+            cropped = crop_image_by_percent(self.original_image, top_p, right_p)
+            self.gui_log(f"Applied percent crop: Top {top_p}%, Right {right_p}%")
+            self.apply_cropped_image(cropped)
+        except Exception as e:
+            QMessageBox.critical(self, self.tr("error"), f"Error applying percent crop: {e}")
+            self.logger.exception(f"Percent crop error: {e}")
+            self.gui_log(f"Percent crop error: {e}")
+
+    def open_crop_dialog(self) -> None:
+        if getattr(self, 'original_image', None) is None:
+            QMessageBox.warning(self, self.tr("warning"), self.tr("no_image_loaded"))
+            return
+        try:
+            crop_dialog = CropDialog(self, self.original_image)
+            if crop_dialog.exec():
+                if crop_dialog.result:
+                    if crop_dialog.result[0] == 'coords':
+                        _, left, top, right, bottom = crop_dialog.result
+                        try:
+                            cropped_img = self.original_image.crop((left, top, right, bottom))
+                            self.gui_log(f"Cropped with coordinates: ({left},{top}) - ({right},{bottom})")
+                            self.apply_cropped_image(cropped_img)
+                        except Exception as ve:
+                            QMessageBox.critical(self, self.tr("error"), f"Failed to crop with coordinates:\n{ve}")
+                            self.logger.exception(f"Coordinate crop error: {ve}")
+                            self.gui_log(f"Coordinate crop error: {ve}")
+            else:
+                self.gui_log("Crop cancelled.")
+        except Exception as e:
+            self.logger.exception(f"Crop dialog error: {e}")
+            self.gui_log(f"Crop dialog error: {e}")
+
+    def apply_cropped_image(self, cropped_img: Any) -> None:
+        tab_name = self.get_selected_tab_name()
+        if not tab_name:
+            return
+        stored_original = self.original_image.copy()
+        stored_cropped = cropped_img.copy()
+        self.loaded_image = stored_cropped.copy()
+        self.save_tab_image(tab_name, stored_original, stored_cropped)
+        self.display_image_preview(self.loaded_image)
+        # Placeholder for OCR trigger, since the OCR logic seems missing in this refactor.
+        self.gui_log("Image cropped. (OCR logic pending)")
+
+    def retranslate_ui(self) -> None:
+        self.ui_manager.retranslate_ui()
+
+    def _normalize_cost_key(self, costkey: str, fallback: str) -> str:
+        from constants import TAB_CONFIGS
+        if costkey in TAB_CONFIGS:
+            return costkey
+        return fallback or list(TAB_CONFIGS.keys())[0]
 
     # ----------------------------------------------------
     # Consolidated methods from UIComponents
@@ -1176,10 +1309,10 @@ class ScoreCalculatorApp(QMainWindow):
                     try:
                         with open(path, 'r', encoding='utf-8') as f:
                             j = json.load(f)
-                        en = j.get('EN') or j.get('internal') or os.path.splitext(fname)[0]
-                        jp = j.get('JP') or j.get('name') or en
+                        en = j.get('character') or j.get('EN') or j.get('internal') or os.path.splitext(fname)[0].replace('_character', '')
+                        jp = j.get('character_jp') or j.get('JP') or j.get('name') or en
                         items_to_add.append((self.tr(jp), en))
-                        config_map[en] = self.current_config_key
+                        config_map[en] = j.get('config') or self.current_config_key
                         self.logger.info("DEBUG: _load_character_profiles - Processing file: %s", fname)
                         self.logger.info("DEBUG: _load_character_profiles - Initial from JSON: EN='%s', JP='%s'", en, jp)
                     except Exception:
