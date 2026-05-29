@@ -185,6 +185,64 @@ class AppLogic(QObject):
              
         return None
 
+    def detect_main_stat_from_ocr(self, ocr_text: str) -> Optional[str]:
+        """
+        Attempts to detect the main stat from OCR text.
+        Returns a canonical main stat string (as used in MAIN_STAT_OPTIONS)
+        or None if not found.
+        """
+        if not ocr_text:
+            return None
+
+        text = ocr_text
+
+        # Build candidate list from MAIN_STAT_OPTIONS
+        try:
+            from constants import MAIN_STAT_OPTIONS, STAT_ALIASES
+        except Exception:
+            MAIN_STAT_OPTIONS = {}
+            STAT_ALIASES = {}
+
+        candidates = []
+        for v in MAIN_STAT_OPTIONS.values():
+            candidates.extend(v)
+
+        # Deduplicate while preserving order
+        seen = set()
+        uniq_candidates = []
+        for c in candidates:
+            if c not in seen:
+                seen.add(c)
+                uniq_candidates.append(c)
+
+        # First try direct / alias matches
+        for cand in uniq_candidates:
+            aliases = STAT_ALIASES.get(cand, []) if isinstance(STAT_ALIASES, dict) else []
+            # check both canonical and aliases
+            for a in (aliases + [cand]):
+                if a and a in text:
+                    return cand
+
+        # Fallback heuristics for common stats
+        if re.search(r'HP\s*%|HP%|体力%', text):
+            return 'HP%'
+        if re.search(r'\bHP\b|体力', text):
+            return 'HP'
+        if re.search(r'攻撃力\s*%|攻撃力%|攻撃%', text) or 'ATK' in text:
+            return '攻撃力%'
+        if re.search(r'攻撃力\b|こうげき', text):
+            return '攻撃力'
+        if re.search(r'防御力\s*%|防御%', text) or 'DEF' in text:
+            return '防御力%'
+        if re.search(r'防御力\b', text):
+            return '防御力'
+        if 'クリティカル率' in text or 'クリ率' in text or 'クリティカル' in text:
+            return 'クリティカル率'
+        if 'クリティカルダメージ' in text or 'クリダメ' in text:
+            return 'クリティカルダメージ'
+
+        return None
+
     character_profile_saved = pyqtSignal(str, str) # name, config_key
 
     def _save_character_profile(self, name: str, costkey: str, mainstats: dict, weights: dict) -> None:
@@ -225,11 +283,26 @@ class AppLogic(QObject):
         try:
             base_dir = get_app_path()
             folder_name = "character_settings_jsons"
-            target_dir = os.path.join(base_dir, folder_name)
-            
-            if not os.path.exists(target_dir):
-                self.log_message.emit(f"Character settings folder not found: {target_dir}")
+
+            # Search for character_settings_jsons in current and parent directories (up to 3 levels)
+            target_dir = None
+            search_dir = base_dir
+            for _ in range(4):
+                candidate = os.path.join(search_dir, folder_name)
+                if os.path.exists(candidate):
+                    target_dir = candidate
+                    break
+                # Move one level up
+                parent = os.path.dirname(search_dir)
+                if parent == search_dir:
+                    break
+                search_dir = parent
+
+            if not target_dir:
+                self.log_message.emit(f"Character settings folder not found: searched from {base_dir} upwards for '{folder_name}'")
                 return {}, []
+            else:
+                self.log_message.emit(f"Character settings folder found: {target_dir}")
 
             # Add predefined characters first
             from constants import _CHAR_NAME_MAP_EN_TO_JP

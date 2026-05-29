@@ -380,15 +380,15 @@ class ScoreCalculatorApp(QMainWindow):
         self._character_config_map[name] = config_key
         self._filter_characters_by_config()
 
-    def on_ocr_completed(self, substats: list[dict], log_messages: list[str]) -> None:
+    def on_ocr_completed(self, substats: list[dict], log_messages: list[str], main_stat: object = None) -> None:
         """Slot to handle the results of OCR processing."""
         for msg in log_messages:
             self.gui_log(msg)
-        
-        if not substats:
+
+        if not substats and not main_stat:
             self.gui_log("OCR completed but no substats were parsed.")
             return
-            
+
         tab_name = self.tab_mgr.get_selected_tab_name()
         if not tab_name:
             self.gui_log("OCR auto-fill failed: No tab selected")
@@ -396,19 +396,52 @@ class ScoreCalculatorApp(QMainWindow):
         if tab_name not in self.tabs_content:
             self.gui_log(f"OCR auto-fill failed: Tab '{tab_name}' not found")
             return
-            
+
+        # Apply detected main stat if present
+        if main_stat:
+            try:
+                content = self.tabs_content.get(tab_name)
+                if content:
+                    main_widget = content.get("main_widget")
+                    if main_widget is not None:
+                        disp = self.tr(main_stat) if isinstance(main_stat, str) else None
+                        if disp and main_widget.findText(disp) != -1:
+                            main_widget.setCurrentText(disp)
+                            self.gui_log(f"Detected main stat: {disp}")
+                        elif isinstance(main_stat, str) and main_widget.findText(main_stat) != -1:
+                            main_widget.setCurrentText(main_stat)
+                            self.gui_log(f"Detected main stat: {main_stat}")
+                        else:
+                            try:
+                                from constants import STAT_ALIASES
+                                applied = False
+                                for key, aliases in STAT_ALIASES.items():
+                                    if main_stat == key or (isinstance(main_stat, str) and main_stat in aliases):
+                                        display_k = self.tr(key)
+                                        if main_widget.findText(display_k) != -1:
+                                            main_widget.setCurrentText(display_k)
+                                            self.gui_log(f"Detected main stat (alias): {display_k}")
+                                            applied = True
+                                            break
+                                if not applied and disp:
+                                    main_widget.setCurrentText(disp)
+                            except Exception:
+                                pass
+            except Exception as e:
+                self.logger.exception(f"Failed to apply detected main stat: {e}")
+
         content = self.tabs_content[tab_name]
         sub_entries = content["sub_entries"]
-        
+
         for i, substat_data in enumerate(substats):
             if i < len(sub_entries):
                 stat_found = substat_data.get("stat", "")
                 num_found = substat_data.get("value", "")
-                
+
                 translated_stat = self.tr(stat_found)
                 sub_entries[i][0].setCurrentText(translated_stat)
                 sub_entries[i][1].setText(num_found)
-        
+
         self.gui_log("Successfully applied OCR results to the current tab.")
 
     def _open_readme(self) -> None:
@@ -431,20 +464,25 @@ class ScoreCalculatorApp(QMainWindow):
 
         combo.blockSignals(True)  # Block signals for individual main stat combo boxes
         try:
-            cost_key = content.get("cost_key", content["cost"])
-            fallback_key = content["cost"]
+            cost_key = content.get("cost_key", content.get("cost"))
+            fallback_key = content.get("cost")
+            self.logger.debug(f"_update_main_stat_combobox: content cost={fallback_key} cost_key={cost_key} mainstats_keys={list(mainstats.keys())}")
             target_key = None
             if cost_key in mainstats:
                 target_key = cost_key
+                self.logger.debug(f"_update_main_stat_combobox: matched cost_key -> {target_key}")
             elif fallback_key in mainstats:
                 target_key = fallback_key
-            elif f"{fallback_key}_1" in mainstats:
+                self.logger.debug(f"_update_main_stat_combobox: matched fallback_key -> {target_key}")
+            elif fallback_key and f"{fallback_key}_1" in mainstats:
                 target_key = f"{fallback_key}_1"
-            
+                self.logger.debug(f"_update_main_stat_combobox: matched fallback_key_1 -> {target_key}")
+
             if target_key and mainstats.get(target_key):
                 stat_name = mainstats[target_key]
                 translated_stat = self.tr(stat_name)
                 index = combo.findText(translated_stat)
+                self.logger.debug(f"_update_main_stat_combobox: applying stat '{stat_name}' (translated '{translated_stat}'), combo index={index}")
                 if index >= 0:
                     combo.setCurrentIndex(index)
                 else:
@@ -455,22 +493,35 @@ class ScoreCalculatorApp(QMainWindow):
             combo.blockSignals(False)  # Unblock signals for individual main stat combo boxes
 
     def _apply_character_main_stats(self, force: bool = False) -> None:
-        """Automatically enters main stats."""
-        if not force and not self.auto_apply_main_stats:
-            return
-        mainstats = CHARACTER_MAIN_STATS.get(self.character_var)
-        if not mainstats:
-            return
-        
-        if self.charcombo:
-            self.charcombo.blockSignals(True)
+        """Apply CHARACTER_MAIN_STATS to the current tabs if a matching profile is loaded."""
+        try:
+            current_char = self.character_var
+            self.logger.debug(f"_apply_character_main_stats: called for '{current_char}', force={force}")
+            if not force and not self.auto_apply_main_stats:
+                self.logger.debug("_apply_character_main_stats: auto apply disabled and not forced")
+                return
+            if not current_char:
+                self.logger.debug("_apply_character_main_stats: no current character selected")
+                return
 
-        for tab_name, content in self.tabs_content.items():
-            combo = content["main_widget"]
-            self._update_main_stat_combobox(combo, content, mainstats)
-        
-        if self.charcombo:
-            self.charcombo.blockSignals(False)
+            mainstats = CHARACTER_MAIN_STATS.get(current_char, {})
+            self.logger.debug(f"_apply_character_main_stats: found mainstats keys: {list(mainstats.keys())}")
+            if not mainstats:
+                self.logger.debug("_apply_character_main_stats: no mainstats present for current character")
+                return
+
+            if self.charcombo:
+                self.charcombo.blockSignals(True)
+
+            for tab_name, content in self.tabs_content.items():
+                self.logger.debug(f"_apply_character_main_stats: updating tab {tab_name} with content.cost={content.get('cost')} cost_key={content.get('cost_key')}")
+                combo = content["main_widget"]
+                self._update_main_stat_combobox(combo, content, mainstats)
+
+            if self.charcombo:
+                self.charcombo.blockSignals(False)
+        except Exception as e:
+            self.logger.exception(f"Failed to apply character main stats: {e}")
 
     def _is_pillow_installed(self) -> bool:
         """Checks if Pillow (PIL) is installed."""
