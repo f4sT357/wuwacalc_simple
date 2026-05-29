@@ -6,6 +6,7 @@ import sys
 import webbrowser
 import hashlib
 from typing import Any, Optional, Dict
+import re
 
 IMAGE_PREVIEW_MAX_WIDTH = 400
 IMAGE_PREVIEW_MAX_HEIGHT = 200
@@ -15,151 +16,46 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget,
     QCheckBox, QRadioButton, QGroupBox, QSplitter, QLineEdit, QFileDialog,
     QLabel
+    , QButtonGroup
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap, QColor, QPainter, QPen
-
 try:
     from PIL import Image, ImageQt
-    import importlib.util
-    is_pil_installed = importlib.util.find_spec('PIL') is not None
-except Exception:
+    is_pil_installed = True
+except ImportError:
     is_pil_installed = False
 
 try:
     import pytesseract
     is_pytesseract_installed = True
-except ImportError:
+except Exception:
+    pytesseract = None
     is_pytesseract_installed = False
 
-from config_manager import ConfigManager
+# Utility helpers
+from utils import get_app_path, crop_image_by_percent, get_substat_display, setup_tesseract
+
 from constants import (
     CHARACTER_MAIN_STATS,
     CHARACTER_STAT_WEIGHTS,
     MAIN_STAT_OPTIONS,
+    STAT_ALIASES,
     SUBSTAT_MAX_VALUES,
+    SUBSTAT_TYPES,
     TAB_CONFIGS,
     get_char_internal_name,
+    get_char_japanese_name,
     THEME_COLORS,
     LOG_FILENAME,
-    CONFIG_FILENAME
+    CONFIG_FILENAME,
 )
-from dialogs import CharSettingDialog, DisplaySettingsDialog, CropDialog
-from ui_components import UIComponents
+
+from config_manager import ConfigManager
+from dialogs import CharSettingDialog, CropDialog, DisplaySettingsDialog
+from echo_data import EchoData
 from languages import TRANSLATIONS
-from utils import get_app_path, setup_tesseract, crop_image_by_percent
-
-# Configure root logger for DEBUG with rotating file and console handlers
-try:
-    app_log_path = os.path.join(get_app_path(), LOG_FILENAME)
-except Exception:
-    app_log_path = LOG_FILENAME
-
-if not logging.root.handlers:
-    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    try:
-        rh = logging.handlers.RotatingFileHandler(app_log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
-        rh.setFormatter(fmt)
-        rh.setLevel(logging.DEBUG)
-        logging.root.addHandler(rh)
-    except Exception:
-        # Fallback: if file handler cannot be created, continue with console only
-        pass
-
-    ch = logging.StreamHandler()
-    ch.setFormatter(fmt)
-    ch.setLevel(logging.DEBUG)
-    logging.root.addHandler(ch)
-
-    logging.root.setLevel(logging.DEBUG)
-
-class CropOverlayLabel(QLabel):
-    """QLabel that draws a crop-area overlay on top of the displayed pixmap.
-
-    Call set_crop_overlay() with fractional coordinates (0.0-1.0 relative to
-    the pixmap) to show the overlay. Call clear_overlay() to remove it.
-    """
-
-    def __init__(self, text: str = "", parent=None) -> None:
-        super().__init__(text, parent)
-        self._crop_rect_f: Optional[tuple] = None  # (left_f, top_f, right_f, bottom_f)
-
-    def set_crop_overlay(
-        self, left_f: float, top_f: float, right_f: float, bottom_f: float
-    ) -> None:
-        """Show a crop-area overlay defined by fractions of the pixmap dimensions."""
-        self._crop_rect_f = (left_f, top_f, right_f, bottom_f)
-        self.update()
-
-    def clear_overlay(self) -> None:
-        """Remove the crop-area overlay."""
-        self._crop_rect_f = None
-        self.update()
-
-    def paintEvent(self, event) -> None:  # type: ignore[override]
-        super().paintEvent(event)
-        if self._crop_rect_f is None:
-            return
-        pm = self.pixmap()
-        if pm is None or pm.isNull():
-            return
-
-        pw, ph = pm.width(), pm.height()
-        lw, lh = self.width(), self.height()
-
-        # Pixmap is drawn centred inside the label
-        x_off = (lw - pw) // 2
-        y_off = (lh - ph) // 2
-
-        left_f, top_f, right_f, bottom_f = self._crop_rect_f
-        cx = x_off + int(left_f * pw)
-        cy = y_off + int(top_f * ph)
-        cw = max(1, int((right_f - left_f) * pw))
-        ch = max(1, int((bottom_f - top_f) * ph))
-        crop_right = cx + cw
-        crop_bottom = cy + ch
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-
-        # --- Semi-transparent dark mask over the non-crop areas ---
-        mask_color = QColor(0, 0, 0, 130)
-        painter.setBrush(mask_color)
-        painter.setPen(Qt.PenStyle.NoPen)
-
-        # Top strip
-        if cy > y_off:
-            painter.drawRect(x_off, y_off, pw, cy - y_off)
-        # Bottom strip
-        if crop_bottom < y_off + ph:
-            painter.drawRect(x_off, crop_bottom, pw, (y_off + ph) - crop_bottom)
-        # Left strip (clipped to crop band vertically)
-        if cx > x_off:
-            painter.drawRect(x_off, cy, cx - x_off, ch)
-        # Right strip
-        if crop_right < x_off + pw:
-            painter.drawRect(crop_right, cy, (x_off + pw) - crop_right, ch)
-
-        # --- Bright border on the crop rectangle ---
-        pen = QPen(QColor(255, 70, 70), 2)
-        pen.setStyle(Qt.PenStyle.SolidLine)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(cx, cy, cw, ch)
-
-        # --- Corner handles ---
-        hs = 7
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(255, 70, 70))
-        for hx, hy in [
-            (cx, cy),
-            (crop_right - hs, cy),
-            (cx, crop_bottom - hs),
-            (crop_right - hs, crop_bottom - hs),
-        ]:
-            painter.drawRect(hx, hy, hs, hs)
-
-        painter.end()
+from ui_components import UIComponents
 
 
 # New UIManager class for handling UI-related operations
@@ -192,60 +88,120 @@ class UIManager:
 
 # New ScoreCalculator class for handling score calculations
 class ScoreCalculator:
+    """Score calculator that parses inputs robustly and respects calculation mode.
+
+    This replaces the previous placeholder logic (which multiplied sums)
+    with a weighted-sum approach and tolerant numeric parsing. It also
+    supports `batch` (all tabs) and `single` (selected tab only) modes.
+    """
+
     def __init__(self, app=None):
         self.app = app
 
+    def _parse_numeric(self, text: Any) -> Optional[float]:
+        """Try to extract a numeric value from a UI string.
+
+        Accepts strings like '10.1%', '18,6%', '470' and returns float or None.
+        """
+        if text is None:
+            return None
+        if isinstance(text, (int, float)):
+            return float(text)
+        s = str(text).strip()
+        if not s:
+            return None
+        # Normalize full-width percent and commas
+        s = s.replace('％', '%')
+        # Find first numeric token (allow comma or dot as decimal separator)
+        m = re.search(r'[-+]?\d+[\.,]?\d*', s)
+        if not m:
+            return None
+        num = m.group(0).replace(',', '.')
+        try:
+            return float(num)
+        except Exception:
+            return None
+
+    def _collect_tab_data(self, tab_name: str) -> dict:
+        """Collect numeric substats, weights and methods for a single tab."""
+        content = self.app.tabs_content.get(tab_name, {})
+        substats = {}
+        for stat_widget, value_widget in content.get('sub_entries', []):
+            stat_name = stat_widget.currentText()
+            value_text = value_widget.text().strip() if value_widget is not None else ''
+            if not stat_name or not value_text:
+                continue
+            num = self._parse_numeric(value_text)
+            if num is None:
+                continue
+            substats[stat_name] = num
+
+        weights = CHARACTER_STAT_WEIGHTS.get(getattr(self.app, 'character_var', ''), CHARACTER_STAT_WEIGHTS.get('General', {}))
+        methods = getattr(self.app.app_config, 'enabled_calc_methods', {})
+        return {
+            'substats': substats,
+            'weights': weights,
+            'methods': methods,
+        }
+
     def calculate_all_scores(self):
-        """Calculate scores for the current tabs using the simplified calculator."""
+        """Calculate scores according to the current `score_mode_var`.
+
+        - 'batch': calculate for all tabs
+        - 'single': calculate only for the currently selected tab
+        """
         if self.app is None:
             return {}
 
+        mode = getattr(self.app, 'score_mode_var', 'batch')
         tabs = {}
-        for tab_name, content in self.app.tabs_content.items():
-            substats = {}
-            for stat_widget, value_widget in content["sub_entries"]:
-                stat_name = stat_widget.currentText()
-                value_text = value_widget.text().strip()
-                if not stat_name or not value_text:
-                    continue
-                try:
-                    substats[stat_name] = float(value_text)
-                except ValueError:
-                    continue
 
-            tabs[tab_name] = {
-                "substats": substats,
-                "weights": CHARACTER_STAT_WEIGHTS.get(
-                    self.app.character_var, CHARACTER_STAT_WEIGHTS["General"]
-                ),
-                "methods": getattr(self.app.app_config, "enabled_calc_methods", {}),
-            }
+        if mode == 'single':
+            tab_name = self.app.get_selected_tab_name()
+            if not tab_name:
+                self.app.gui_log('No tab selected for single calculation.')
+                return {}
+            tabs[tab_name] = self._collect_tab_data(tab_name)
+        else:
+            for tab_name in list(self.app.tabs_content.keys()):
+                tabs[tab_name] = self._collect_tab_data(tab_name)
 
         results = self.calculate_batch_scores(tabs)
-        if getattr(self.app, "result_text", None) is not None:
-            self.app.result_text.setPlainText("\n".join(f"{key}: {value}" for key, value in results.items()))
+        if getattr(self.app, 'result_text', None) is not None:
+            try:
+                self.app.result_text.setPlainText('\n'.join(f"{key}: {value:.2f}" for key, value in results.items()))
+            except Exception:
+                self.app.result_text.setPlainText('\n'.join(f"{key}: {value}" for key, value in results.items()))
         return results
 
-    def calculate_single_score(self, substats, weights, methods=None):
-        """Perform single score calculation.
+    def calculate_single_score(self, substats: dict, weights: dict, methods: dict | None = None) -> float:
+        """Calculate a weighted sum of substats using provided weights.
 
-        `methods` is accepted for compatibility but not used by the placeholder logic.
+        This is a simple, clear default behaviour until per-method
+        calculations are wired in.
         """
-        try:
-            s_vals = sum(float(v) for v in substats.values()) if isinstance(substats, dict) else float(substats)
-        except Exception:
-            s_vals = 0.0
-        try:
-            w_vals = sum(float(v) for v in weights.values()) if isinstance(weights, dict) else float(weights)
-        except Exception:
-            w_vals = 0.0
-        return s_vals * w_vals
+        if not isinstance(substats, dict) or not substats:
+            return 0.0
+        score = 0.0
+        for stat, val in substats.items():
+            try:
+                w = float(weights.get(stat, 1.0)) if isinstance(weights, dict) else float(weights)
+            except Exception:
+                w = 1.0
+            try:
+                v = float(val)
+            except Exception:
+                # Best-effort parse
+                parsed = self._parse_numeric(val)
+                v = parsed if parsed is not None else 0.0
+            score += v * w
+        return score
 
-    def calculate_batch_scores(self, tabs):
-        """Perform batch score calculations."""
+    def calculate_batch_scores(self, tabs: dict) -> dict:
+        """Apply single-score calculation across provided tabs."""
         results = {}
         for tab, data in tabs.items():
-            results[tab] = self.calculate_single_score(data['substats'], data['weights'], data['methods'])
+            results[tab] = self.calculate_single_score(data.get('substats', {}), data.get('weights', {}), data.get('methods', {}))
         return results
 
 # Refactor ScoreCalculatorApp to use UIManager and ScoreCalculator
@@ -570,15 +526,19 @@ class ScoreCalculatorApp(QMainWindow):
         self._character_config_map[name] = config_key
         self._filter_characters_by_config()
 
-    def on_ocr_completed(self, substats: list[dict], log_messages: list[str]) -> None:
-        """Slot to handle the results of OCR processing."""
+    def on_ocr_completed(self, substats: list[dict], log_messages: list[str], main_stat: object = None) -> None:
+        """Slot to handle the results of OCR processing.
+
+        Accepts optional `main_stat` which, if provided, will be applied
+        to the main-stat combobox for the current tab.
+        """
         for msg in log_messages:
             self.gui_log(msg)
-        
-        if not substats:
+
+        if not substats and not main_stat:
             self.gui_log("OCR completed but no substats were parsed.")
             return
-            
+
         tab_name = self.get_selected_tab_name()
         if not tab_name:
             self.gui_log("OCR auto-fill failed: No tab selected")
@@ -586,15 +546,52 @@ class ScoreCalculatorApp(QMainWindow):
         if tab_name not in self.tabs_content:
             self.gui_log(f"OCR auto-fill failed: Tab '{tab_name}' not found")
             return
-            
+
+        # Apply detected main stat if present
+        if main_stat:
+            try:
+                content = self.tabs_content.get(tab_name)
+                if content:
+                    main_widget = content.get("main_widget")
+                    if main_widget is not None:
+                        # Try several matching strategies
+                        disp = self.tr(main_stat) if isinstance(main_stat, str) else None
+                        if disp and main_widget.findText(disp) != -1:
+                            main_widget.setCurrentText(disp)
+                            self.gui_log(f"Detected main stat: {disp}")
+                        elif isinstance(main_stat, str) and main_widget.findText(main_stat) != -1:
+                            main_widget.setCurrentText(main_stat)
+                            self.gui_log(f"Detected main stat: {main_stat}")
+                        else:
+                            try:
+                                from constants import STAT_ALIASES
+                                applied = False
+                                for key, aliases in STAT_ALIASES.items():
+                                    if main_stat == key or (isinstance(main_stat, str) and main_stat in aliases):
+                                        display_k = self.tr(key)
+                                        if main_widget.findText(display_k) != -1:
+                                            main_widget.setCurrentText(display_k)
+                                            self.gui_log(f"Detected main stat (alias): {display_k}")
+                                            applied = True
+                                            break
+                                if not applied:
+                                    # Last resort: set to translated value (may not match UI options)
+                                    if disp:
+                                        main_widget.setCurrentText(disp)
+                            except Exception:
+                                pass
+            except Exception as e:
+                self.logger.exception(f"Failed to apply detected main stat: {e}")
+
+        # Populate substats into widgets
         content = self.tabs_content[tab_name]
         sub_entries = content["sub_entries"]
-        
+
         for i, substat_data in enumerate(substats):
             if i < len(sub_entries):
                 stat_found = substat_data.get("stat", "")
                 num_found = substat_data.get("value", "")
-                
+
                 translated_stat = self.tr(stat_found)
                 sub_entries[i][0].setCurrentText(translated_stat)
                 sub_entries[i][1].setText(num_found)
@@ -614,31 +611,65 @@ class ScoreCalculatorApp(QMainWindow):
             self.logger.exception(f"README open error: {e}")
             QMessageBox.critical(self, "Error", f"Could not open README:\n{e}")
 
-    def _update_main_stat_combobox(self, combo: QComboBox, content: dict, mainstats: dict) -> None:
+    def _update_main_stat_combobox(self, combo: QComboBox, content: dict, mainstats: dict, tab_name: str | None = None) -> None:
         """Helper to update a single main stat combobox."""
         if not combo:
             return
 
         combo.blockSignals(True)
         try:
-            cost_key = content.get("cost_key", content["cost"])
-            fallback_key = content["cost"]
+            # Debug info about mapping inputs
+            try:
+                self.logger.debug(f"_update_main_stat_combobox: tab_name={tab_name}, cost={content.get('cost')}, cost_key={content.get('cost_key')}, mainstats_keys={list(mainstats.keys())}")
+            except Exception:
+                pass
+
             target_key = None
-            if cost_key in mainstats:
-                target_key = cost_key
-            elif fallback_key in mainstats:
-                target_key = fallback_key
-            elif f"{fallback_key}_1" in mainstats:
-                target_key = f"{fallback_key}_1"
-            
+
+            # 1) direct tab name
+            if tab_name and tab_name in mainstats:
+                target_key = tab_name
+                self.logger.debug(f"_update_main_stat_combobox: matched tab_name -> {target_key}")
+
+            # 2) content cost_key
+            if not target_key:
+                cost_key = content.get("cost_key", content.get("cost"))
+                if cost_key and cost_key in mainstats:
+                    target_key = cost_key
+                    self.logger.debug(f"_update_main_stat_combobox: matched cost_key -> {target_key}")
+
+            # 3) fallback numeric keys
+            if not target_key:
+                fallback_key = content.get("cost")
+                if fallback_key and fallback_key in mainstats:
+                    target_key = fallback_key
+                    self.logger.debug(f"_update_main_stat_combobox: matched fallback_key -> {target_key}")
+                elif fallback_key and f"{fallback_key}_1" in mainstats:
+                    target_key = f"{fallback_key}_1"
+                    self.logger.debug(f"_update_main_stat_combobox: matched fallback_key_1 -> {target_key}")
+
+            # 4) search in mainstats keys for substring matches
+            if not target_key and tab_name:
+                for k in mainstats.keys():
+                    try:
+                        if tab_name in k or (content.get('cost') and content.get('cost') in k):
+                            target_key = k
+                            self.logger.debug(f"_update_main_stat_combobox: found best-effort key -> {target_key}")
+                            break
+                    except Exception:
+                        continue
+
             if target_key and mainstats.get(target_key):
                 stat_name = mainstats[target_key]
                 translated_stat = self.tr(stat_name)
                 index = combo.findText(translated_stat)
+                self.logger.debug(f"_update_main_stat_combobox: applying stat '{stat_name}' (translated '{translated_stat}'), combo index={index}")
                 if index >= 0:
                     combo.setCurrentIndex(index)
                 else:
                     combo.setCurrentText(translated_stat)
+            else:
+                self.logger.debug(f"_update_main_stat_combobox: no target_key found for tab_name={tab_name}")
         except Exception as e:
             self.logger.exception(f"Error updating main stat combobox: {e}")
         finally:
@@ -648,17 +679,24 @@ class ScoreCalculatorApp(QMainWindow):
         """Automatically enters main stats."""
         if not force and not self.auto_apply_main_stats:
             return
+
+        self.logger.debug(f"_apply_character_main_stats: character_var={self.character_var} force={force} auto_apply={self.auto_apply_main_stats}")
         mainstats = CHARACTER_MAIN_STATS.get(self.character_var)
+        self.logger.debug(f"_apply_character_main_stats: mainstats_found={bool(mainstats)}")
         if not mainstats:
             return
-        
+
         if self.charcombo:
             self.charcombo.blockSignals(True)
 
         for tab_name, content in self.tabs_content.items():
             combo = content["main_widget"]
-            self._update_main_stat_combobox(combo, content, mainstats)
-        
+            try:
+                self.logger.debug(f"_apply_character_main_stats: updating tab {tab_name} with content.cost={content.get('cost')} cost_key={content.get('cost_key')}")
+            except Exception:
+                pass
+            self._update_main_stat_combobox(combo, content, mainstats, tab_name)
+
         if self.charcombo:
             self.charcombo.blockSignals(False)
 
@@ -712,6 +750,16 @@ class ScoreCalculatorApp(QMainWindow):
         self._load_character_profiles()
         self._filter_characters_by_config()
         self._check_and_alert_environment()
+        # Ensure main stats and preferred config are applied for any preselected character
+        try:
+            if getattr(self, 'charcombo', None) and self.charcombo.currentIndex() > 0:
+                # Trigger the same handler as if the user selected the character
+                self.on_character_change(self.charcombo.currentText())
+            else:
+                # Fallback: attempt to apply based on stored `character_var`
+                self._apply_character_main_stats(force=True)
+        except Exception:
+            self.logger.exception("Failed to apply character selection at startup")
     
     def opencharsetting(self) -> None:
         """Display the character settings dialog."""
@@ -798,6 +846,38 @@ class ScoreCalculatorApp(QMainWindow):
             if index < len(keys):
                 return keys[index]
         return self.notebook.tabText(index)
+
+    def select_tab_by_internal_name(self, tab_name: str) -> bool:
+        """Selects the notebook tab corresponding to the internal tab name.
+
+        Returns True if the tab was found and selected, False otherwise.
+        """
+        try:
+            from constants import TAB_CONFIGS
+            # Prefer mapping via current config's ordered list
+            config_key = getattr(self, 'current_config_key', None)
+            if config_key and config_key in TAB_CONFIGS:
+                keys = TAB_CONFIGS[config_key]
+                if tab_name in keys:
+                    idx = keys.index(tab_name)
+                    if hasattr(self, 'notebook') and self.notebook is not None and 0 <= idx < self.notebook.count():
+                        self.notebook.setCurrentIndex(idx)
+                        self.logger.debug(f"select_tab_by_internal_name: switched to {tab_name} (index {idx}) via TAB_CONFIGS")
+                        return True
+
+            # Fallback: try mapping via tabs_content insertion order
+            if hasattr(self, 'tabs_content') and isinstance(self.tabs_content, dict):
+                keys = list(self.tabs_content.keys())
+                if tab_name in keys:
+                    idx = keys.index(tab_name)
+                    if hasattr(self, 'notebook') and self.notebook is not None and 0 <= idx < self.notebook.count():
+                        self.notebook.setCurrentIndex(idx)
+                        self.logger.debug(f"select_tab_by_internal_name: switched to {tab_name} (index {idx}) via tabs_content fallback")
+                        return True
+        except Exception:
+            self.logger.exception("Failed to select tab by internal name")
+        self.logger.debug(f"select_tab_by_internal_name: failed to find tab '{tab_name}'")
+        return False
     
     def show_tab_image(self, tab_name: str) -> None:
         """Display the image saved in the tab."""
@@ -936,7 +1016,30 @@ class ScoreCalculatorApp(QMainWindow):
             if internal_name:
                 self.character_var = internal_name
                 self.gui_log(f"Character selected: {internal_name}")
-                self._apply_character_main_stats()
+
+                # If there's a preferred config (cost layout) for this character, switch to it
+                try:
+                    pref_cfg = None
+                    if hasattr(self, '_character_config_map'):
+                        pref_cfg = self._character_config_map.get(internal_name)
+                    self.logger.debug(f"on_character_change: preferred config for {internal_name} -> {pref_cfg}")
+                    if pref_cfg and pref_cfg != self.current_config_key:
+                        # Use config combo setter to trigger on_config_change (which updates tabs)
+                        if hasattr(self, 'config_combo') and self.config_combo is not None:
+                            self.config_combo.setCurrentText(pref_cfg)
+                        else:
+                            # Fallback: directly set and update
+                            self.current_config_key = pref_cfg
+                            self.update_tabs()
+                except Exception:
+                    self.logger.exception("Failed to apply character preferred config")
+
+                # Apply main stats for selected character (force regardless of auto-apply setting)
+                try:
+                    self._apply_character_main_stats(force=True)
+                except Exception:
+                    self.logger.exception("Failed to apply character main stats on selection")
+
                 self.save_config()
             else:
                 self.character_var = ""
@@ -1189,16 +1292,26 @@ class ScoreCalculatorApp(QMainWindow):
             self.gui_log(f"Crop dialog error: {e}")
 
     def apply_cropped_image(self, cropped_img: Any) -> None:
-        tab_name = self.get_selected_tab_name()
-        if not tab_name:
-            return
-        stored_original = self.original_image.copy()
+        # Always update loaded image and show preview so the user sees the crop result
+        stored_original = self.original_image.copy() if getattr(self, 'original_image', None) is not None else None
         stored_cropped = cropped_img.copy()
         self.loaded_image = stored_cropped.copy()
-        self.save_tab_image(tab_name, stored_original, stored_cropped)
         self.display_image_preview(self.loaded_image)
-        # Placeholder for OCR trigger, since the OCR logic seems missing in this refactor.
-        self.gui_log("Image cropped. (OCR logic pending)")
+
+        tab_name = self.get_selected_tab_name()
+        if not tab_name:
+            # No tab selected: show preview and instruct user to select a tab to save/attach
+            self.gui_log("Image cropped and preview updated. No tab selected - select a tab to save the image or enable auto-assignment.")
+            return
+
+        try:
+            if stored_original is not None:
+                self.save_tab_image(tab_name, stored_original, stored_cropped)
+            else:
+                self.save_tab_image(tab_name, stored_cropped, stored_cropped)
+            self.gui_log("Image cropped and saved to selected tab.")
+        except Exception as e:
+            self.gui_log(f"Failed to save cropped image to tab '{tab_name}': {e}")
 
     def retranslate_ui(self) -> None:
         self.ui_manager.retranslate_ui()
@@ -1282,30 +1395,34 @@ class ScoreCalculatorApp(QMainWindow):
         # Row 1: Input Mode
         self.lbl_input_mode = QLabel(self.tr("input_mode"))
         settings_layout.addWidget(self.lbl_input_mode, 1, 0)
-        mode_layout = QHBoxLayout()
-
+        # Put the input-mode radio buttons inside their own container widget
+        # so Qt's autoExclusive behavior (which is parent-based) won't
+        # make them exclusive with other radio buttons elsewhere.
         self.rb_manual = QRadioButton(self.tr("manual"))
         self.rb_ocr = QRadioButton(self.tr("ocr"))
+        self.rb_manual.setAutoExclusive(False)
+        self.rb_ocr.setAutoExclusive(False)
 
-        self.mode_group = QGroupBox()
-        self.mode_group.setLayout(QHBoxLayout())
+        self.mode_button_group = QButtonGroup(self)
+        self.mode_button_group.addButton(self.rb_manual, 0)
+        self.mode_button_group.addButton(self.rb_ocr, 1)
+        self.mode_button_group.setExclusive(True)
 
-        mode_layout.addWidget(self.rb_manual)
-        mode_layout.addWidget(self.rb_ocr)
+        mode_container = QWidget()
+        mode_container_layout = QHBoxLayout(mode_container)
+        mode_container_layout.setContentsMargins(0, 0, 0, 0)
+        mode_container_layout.addWidget(self.rb_manual)
+        mode_container_layout.addWidget(self.rb_ocr)
 
         if self.mode_var == "manual":
             self.rb_manual.setChecked(True)
         else:
             self.rb_ocr.setChecked(True)
 
-        self.rb_manual.toggled.connect(
-            lambda c: self.on_mode_change("manual") if c else None
-        )
-        self.rb_ocr.toggled.connect(
-            lambda c: self.on_mode_change("ocr") if c else None
-        )
+        self.rb_manual.toggled.connect(lambda c: self.on_mode_change("manual") if c else None)
+        self.rb_ocr.toggled.connect(lambda c: self.on_mode_change("ocr") if c else None)
 
-        settings_layout.addLayout(mode_layout, 1, 1, 1, 3)
+        settings_layout.addWidget(mode_container, 1, 1, 1, 3)
 
         # Auto Main & Theme
         right_sub_layout = QVBoxLayout()
@@ -1319,24 +1436,38 @@ class ScoreCalculatorApp(QMainWindow):
         # Row 2: Calculation Mode
         self.lbl_calc_mode = QLabel(self.tr("calc_mode"))
         settings_layout.addWidget(self.lbl_calc_mode, 2, 0)
-        calc_mode_layout = QHBoxLayout()
+        # Place calc-mode radio buttons into their own container as well
         self.rb_batch = QRadioButton(self.tr("batch"))
         self.rb_single = QRadioButton(self.tr("single_only"))
+        self.rb_batch.setAutoExclusive(False)
+        self.rb_single.setAutoExclusive(False)
 
         if self.score_mode_var == "batch":
             self.rb_batch.setChecked(True)
         else:
             self.rb_single.setChecked(True)
 
-        self.rb_batch.toggled.connect(
-            lambda c: self.on_score_mode_change("batch") if c else None
-        )
-        self.rb_single.toggled.connect(
-            lambda c: self.on_score_mode_change("single") if c else None
-        )
+        self.rb_batch.toggled.connect(lambda c: self.on_score_mode_change("batch") if c else None)
+        self.rb_single.toggled.connect(lambda c: self.on_score_mode_change("single") if c else None)
 
-        calc_mode_layout.addWidget(self.rb_batch)
-        calc_mode_layout.addWidget(self.rb_single)
+        calc_container = QWidget()
+        calc_container_layout = QHBoxLayout(calc_container)
+        calc_container_layout.setContentsMargins(0, 0, 0, 0)
+        calc_container_layout.addWidget(self.rb_batch)
+        calc_container_layout.addWidget(self.rb_single)
+
+        # Ensure calc-mode exclusivity is managed by a button group too
+        self.calc_mode_button_group = QButtonGroup(self)
+        self.calc_mode_button_group.addButton(self.rb_batch, 0)
+        self.calc_mode_button_group.addButton(self.rb_single, 1)
+        self.calc_mode_button_group.setExclusive(True)
+
+        settings_layout.addWidget(calc_container, 2, 1, 1, 3)
+        # Ensure calc-mode radio buttons are exclusive only within calc group
+        self.calc_mode_button_group = QButtonGroup(self)
+        self.calc_mode_button_group.addButton(self.rb_batch, 0)
+        self.calc_mode_button_group.addButton(self.rb_single, 1)
+        self.calc_mode_button_group.setExclusive(True)
         settings_layout.addLayout(calc_mode_layout, 2, 1, 1, 3)
 
         # Row 3: Calculation Methods Selection

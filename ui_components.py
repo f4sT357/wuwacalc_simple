@@ -7,7 +7,8 @@ Provides UI construction for the main window and tab management.
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
                              QTabWidget, QScrollArea, QTextEdit, QLabel, 
                              QPushButton, QComboBox, QCheckBox, QRadioButton, 
-                             QGroupBox, QSplitter, QFrame, QSizePolicy, QLineEdit)
+                             QGroupBox, QSplitter, QFrame, QSizePolicy, QLineEdit,
+                             QButtonGroup)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QPixmap, QImage
 
@@ -111,28 +112,57 @@ class UIComponents:
         # Row 1: Input Mode
         self.lbl_input_mode = QLabel(self.app.tr("input_mode"))
         settings_layout.addWidget(self.lbl_input_mode, 1, 0)
-        mode_layout = QHBoxLayout()
-        
+
         self.rb_manual = QRadioButton(self.app.tr("manual"))
         self.rb_ocr = QRadioButton(self.app.tr("ocr"))
-        
-        # Group radio buttons
-        self.mode_group = QGroupBox() # Invisible group logic handled by Qt auto-exclusive
-        self.mode_group.setLayout(QHBoxLayout()) # Just a container
-        # Actually, just adding them to layout works if they share parent, but let's be explicit if needed.
-        # For simple layout:
-        mode_layout.addWidget(self.rb_manual)
-        mode_layout.addWidget(self.rb_ocr)
-        
+        # Disable Qt's parent-based autoExclusive to avoid accidental cross-group behavior
+        self.rb_manual.setAutoExclusive(False)
+        self.rb_ocr.setAutoExclusive(False)
+
+        # Use a dedicated container and button group to avoid cross-parent autoExclusive issues
+        mode_container = QWidget()
+        mode_container_layout = QHBoxLayout(mode_container)
+        mode_container_layout.setContentsMargins(0, 0, 0, 0)
+        mode_container_layout.addWidget(self.rb_manual)
+        mode_container_layout.addWidget(self.rb_ocr)
+
+        # ButtonGroup parented to the container to scope exclusivity
+        self.mode_button_group = QButtonGroup(mode_container)
+        self.mode_button_group.addButton(self.rb_manual, 0)
+        self.mode_button_group.addButton(self.rb_ocr, 1)
+        self.mode_button_group.setExclusive(True)
+
         if self.app.mode_var == "manual":
             self.rb_manual.setChecked(True)
         else:
             self.rb_ocr.setChecked(True)
-            
+
+        # Debug helper: log current states when any relevant radio toggles
+        def _log_state(_=None):
+            try:
+                s = (
+                    f"DBG RadioState input(manual={self.rb_manual.isChecked()},ocr={self.rb_ocr.isChecked()}) " \
+                    f"calc(batch={self.rb_batch.isChecked() if hasattr(self, 'rb_batch') else 'N/A'},single={self.rb_single.isChecked() if hasattr(self, 'rb_single') else 'N/A'})"
+                )
+                # Use both logger and GUI log to surface immediately
+                try:
+                    self.app.logger.debug(s)
+                except Exception:
+                    pass
+                try:
+                    if hasattr(self.app, 'gui_log'):
+                        self.app.gui_log(s)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
         self.rb_manual.toggled.connect(lambda c: self.app.on_mode_change("manual") if c else None)
         self.rb_ocr.toggled.connect(lambda c: self.app.on_mode_change("ocr") if c else None)
-        
-        settings_layout.addLayout(mode_layout, 1, 1, 1, 3)
+        self.rb_manual.toggled.connect(_log_state)
+        self.rb_ocr.toggled.connect(_log_state)
+
+        settings_layout.addWidget(mode_container, 1, 1, 1, 3)
         
         # Auto Main & Theme
         right_sub_layout = QVBoxLayout()
@@ -150,21 +180,40 @@ class UIComponents:
         
         self.lbl_calc_mode = QLabel(self.app.tr("calc_mode"))
         settings_layout.addWidget(self.lbl_calc_mode, 2, 0)
-        calc_mode_layout = QHBoxLayout()
+
         self.rb_batch = QRadioButton(self.app.tr("batch"))
         self.rb_single = QRadioButton(self.app.tr("single_only"))
-        
+        # Disable autoExclusive and let the explicit QButtonGroup manage exclusivity
+        self.rb_batch.setAutoExclusive(False)
+        self.rb_single.setAutoExclusive(False)
+
+        # Use a container and a button group to isolate exclusivity
+        calc_container = QWidget()
+        calc_container_layout = QHBoxLayout(calc_container)
+        calc_container_layout.setContentsMargins(0, 0, 0, 0)
+        calc_container_layout.addWidget(self.rb_batch)
+        calc_container_layout.addWidget(self.rb_single)
+
+        # ButtonGroup parented to the container to scope exclusivity
+        self.calc_mode_button_group = QButtonGroup(calc_container)
+        self.calc_mode_button_group.addButton(self.rb_batch, 0)
+        self.calc_mode_button_group.addButton(self.rb_single, 1)
+        self.calc_mode_button_group.setExclusive(True)
+
         if self.app.score_mode_var == "batch":
             self.rb_batch.setChecked(True)
         else:
             self.rb_single.setChecked(True)
-            
-            self.rb_batch.toggled.connect(lambda c: self.app.on_score_mode_change("batch") if c else None)
-            self.rb_single.toggled.connect(lambda c: self.app.on_score_mode_change("single") if c else None)
-        
-        calc_mode_layout.addWidget(self.rb_batch)
-        calc_mode_layout.addWidget(self.rb_single)
-        settings_layout.addLayout(calc_mode_layout, 2, 1, 1, 3)
+
+
+        # Connect toggles (always register handlers regardless of initial state)
+        self.rb_batch.toggled.connect(lambda c: self.app.on_score_mode_change("batch") if c else None)
+        self.rb_single.toggled.connect(lambda c: self.app.on_score_mode_change("single") if c else None)
+        # Also log state for debugging
+        self.rb_batch.toggled.connect(_log_state)
+        self.rb_single.toggled.connect(_log_state)
+
+        settings_layout.addWidget(calc_container, 2, 1, 1, 3)
         
         # Row 3: Calculation Methods Selection
         self.lbl_calc_methods = QLabel(self.app.tr("calc_methods"))

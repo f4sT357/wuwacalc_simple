@@ -23,8 +23,9 @@ from utils import crop_image_by_percent
 
 class ImageProcessor(QObject):
     """Class responsible for image processing and OCR."""
-    
-    ocr_completed = pyqtSignal(list, list) # substats, log_messages
+
+    # Emit substats (list), log_messages (list), main_stat (str or None)
+    ocr_completed = pyqtSignal(list, list, object) # substats, log_messages, main_stat
     
     # Constants
     IMAGE_PREVIEW_MAX_WIDTH = 400
@@ -144,10 +145,32 @@ class ImageProcessor(QObject):
                     
                     # Parse Stats
                     substats, logs = self.logic.parse_substats_from_ocr(ocr_text, self.app.language)
+                    # Try to detect main stat for this image
+                    try:
+                        main_stat = None
+                        if hasattr(self.logic, 'detect_main_stat_from_ocr'):
+                            main_stat = self.logic.detect_main_stat_from_ocr(ocr_text)
+                    except Exception:
+                        main_stat = None
                     
-                    # Populate Tab
-                    self._populate_tab_data(target_tab, substats)
-                    
+                    # Switch UI to target tab (so user sees where data will be entered)
+                    switched = False
+                    try:
+                        if hasattr(self.app, 'select_tab_by_internal_name'):
+                            switched = self.app.select_tab_by_internal_name(target_tab)
+                        else:
+                            from constants import TAB_CONFIGS
+                            if self.app.current_config_key in TAB_CONFIGS and target_tab in TAB_CONFIGS[self.app.current_config_key]:
+                                idx = TAB_CONFIGS[self.app.current_config_key].index(target_tab)
+                                if hasattr(self.app, 'notebook') and self.app.notebook is not None and 0 <= idx < self.app.notebook.count():
+                                    self.app.notebook.setCurrentIndex(idx)
+                                    switched = True
+                    except Exception:
+                        switched = False
+
+                    # Populate Tab (visible if switched)
+                    self._populate_tab_data(target_tab, substats, main_stat)
+
                     # Save Image to Tab
                     # Save COPIES to ensure isolation
                     self.app.tab_mgr.save_tab_image(target_tab, image.copy(), cropped_img.copy())
@@ -193,41 +216,55 @@ class ImageProcessor(QObject):
              return None
              
         tab_keys = TAB_CONFIGS[config_key]
-        
+
+        # Prefer truly empty tabs (no substat entries filled). If none are empty,
+        # fall back to the first matching tab (allow overwrite).
+        fallback_candidate = None
         for key in tab_keys:
             if key in exclude_tabs:
                 continue
-            
+
             content = self.app.tabs_content.get(key)
             if not content:
                 continue
-                
+
             # Check cost match
-            # The key usually looks like "cost4_echo" or "cost3_echo_1"
-            # We can extract cost from key or use content['cost']
             tab_cost = content.get("cost")
             if tab_cost != cost:
                 continue
-            
-            # Check if empty (Main stat not selected, or no substats?)
-            # Let's consider it empty if Main Stat is not selected OR first substat is empty.
-            # actually better to just check if we've already assigned it in this batch (exclude_tabs)
-            # AND if it was effectively empty before? 
-            # Users might want to overwrite. But 'Auto-classify' usually implies filling slots.
-            # Let's check if the widget has data.
-            main_combo = content["main_widget"]
-            
-            # If main combo index is -1 or text is empty/default, treat as empty?
-            # Or just rely on exclude_tabs causing us to fill sequentially.
-            # If the user has data in tab 1, and loads 5 images, do we overwrite tab 1?
-            # Probably safest to overwrite if they are running a batch command, OR fill empty ones.
-            # Given the request is "classify and allocate", filling empty ones first is smarter, 
-            # but usually users clear all then load.
-            # Let's strict check: if we haven't touched it in this batch, use it.
-            # The simple logic is: Fill slots sequentially.
-            return key
-            
-        return None
+
+            # Determine emptiness by inspecting sub_entries (stat/value pairs).
+            try:
+                sub_entries = content.get("sub_entries", [])
+                is_empty = True
+                for stat_widget, val_widget in sub_entries:
+                    stat_text = ""
+                    val_text = ""
+                    if hasattr(stat_widget, "currentText"):
+                        try:
+                            stat_text = stat_widget.currentText() or ""
+                        except Exception:
+                            stat_text = ""
+                    if hasattr(val_widget, "text"):
+                        try:
+                            val_text = val_widget.text() or ""
+                        except Exception:
+                            val_text = ""
+
+                    if stat_text.strip() or val_text.strip():
+                        is_empty = False
+                        break
+
+                if is_empty:
+                    return key
+
+                if fallback_candidate is None:
+                    fallback_candidate = key
+            except Exception:
+                # If any widget inspection fails, skip this tab
+                continue
+
+        return fallback_candidate
 
     def _find_any_free_tab(self, exclude_tabs: set) -> Optional[str]:
         """Fallback: find any tab not yet assigned."""
@@ -241,13 +278,48 @@ class ImageProcessor(QObject):
                 return key
         return None
 
-    def _populate_tab_data(self, tab_name: str, substats: list) -> None:
-        """Directly updates the widgets for the given tab."""
+    def _populate_tab_data(self, tab_name: str, substats: list, main_stat: Optional[str] = None) -> None:
+        """Directly updates the widgets for the given tab.
+
+        If `main_stat` is provided it will attempt to set the tab's main stat
+        combobox to the detected value.
+        """
         if tab_name not in self.app.tabs_content:
             return
-            
+        
         content = self.app.tabs_content[tab_name]
         sub_entries = content["sub_entries"]
+
+        # Apply detected main stat if present
+        if main_stat:
+            try:
+                main_widget = content.get("main_widget")
+                if main_widget is not None:
+                    disp = self.app.tr(main_stat) if isinstance(main_stat, str) else None
+                    if disp and main_widget.findText(disp) != -1:
+                        main_widget.setCurrentText(disp)
+                        self.app.gui_log(f"Detected main stat: {disp}")
+                    elif isinstance(main_stat, str) and main_widget.findText(main_stat) != -1:
+                        main_widget.setCurrentText(main_stat)
+                        self.app.gui_log(f"Detected main stat: {main_stat}")
+                    else:
+                        try:
+                            from constants import STAT_ALIASES
+                            applied = False
+                            for key, aliases in STAT_ALIASES.items():
+                                if main_stat == key or (isinstance(main_stat, str) and main_stat in aliases):
+                                    display_k = self.app.tr(key)
+                                    if main_widget.findText(display_k) != -1:
+                                        main_widget.setCurrentText(display_k)
+                                        self.app.gui_log(f"Detected main stat (alias): {display_k}")
+                                        applied = True
+                                        break
+                            if not applied and disp:
+                                main_widget.setCurrentText(disp)
+                        except Exception:
+                            pass
+            except Exception as e:
+                self.app.logger.exception(f"Failed to apply main stat: {e}")
         
         # We don't have main stat from OCR usually (unless we parse it too, but logic mostly parses substats).
         # So we leave main stat alone or user sets it? 
@@ -371,23 +443,126 @@ class ImageProcessor(QObject):
     
     def apply_cropped_image(self, cropped_img: Any) -> None:
         """Save, display, and run OCR on the cropped image."""
-        tab_name = self.app.tab_mgr.get_selected_tab_name()
-        if not tab_name:
-            return
+        # Determine currently selected tab (fallback used if cost detection fails)
+        try:
+            selected_tab = self.app.tab_mgr.get_selected_tab_name()
+        except Exception:
+            selected_tab = None
 
-        stored_original = self.app.original_image.copy()
+        stored_original = self.app.original_image.copy() if getattr(self.app, 'original_image', None) is not None else None
         stored_cropped = cropped_img.copy()
         self.app.loaded_image = stored_cropped.copy()
-        
-        self.app.tab_mgr.save_tab_image(tab_name, stored_original, stored_cropped)
-        
-        self.display_image_preview(self.app.loaded_image)
-        
-        # Run OCR
-        ocr_text = self.logic._perform_ocr(cropped_img)
-        if ocr_text is not None:
-            substats, log_messages = self.logic.parse_substats_from_ocr(ocr_text, self.app.language)
-            self.ocr_completed.emit(substats, log_messages)
+        # Always update preview so user sees the cropped image immediately
+        try:
+            self.display_image_preview(self.app.loaded_image)
+        except Exception:
+            pass
+
+        # Try OCR -> detect cost/main stat/substats
+        try:
+            ocr_text = self.logic._perform_ocr(cropped_img)
+        except Exception:
+            ocr_text = None
+
+        main_stat = None
+        substats = []
+        log_messages = []
+
+        # Decide target tab: prefer cost-detected matching empty tab
+        target_tab = selected_tab
+        if ocr_text:
+            try:
+                substats, log_messages = self.logic.parse_substats_from_ocr(ocr_text, self.app.language)
+            except Exception:
+                substats, log_messages = [], []
+
+            try:
+                if hasattr(self.logic, 'detect_main_stat_from_ocr'):
+                    main_stat = self.logic.detect_main_stat_from_ocr(ocr_text)
+            except Exception:
+                main_stat = None
+
+            try:
+                cost = None
+                if hasattr(self.logic, 'detect_cost_from_ocr'):
+                    cost = self.logic.detect_cost_from_ocr(ocr_text)
+                if cost:
+                    candidate = self._find_free_tab_for_cost(cost, set())
+                    if candidate:
+                        target_tab = candidate
+                        self.app.gui_log(f"Detected Cost: {cost} -> assigning to tab: {target_tab}")
+            except Exception:
+                pass
+
+        # If no target tab yet, try any free tab
+        if not target_tab:
+            try:
+                target_tab = self._find_any_free_tab(set())
+            except Exception:
+                target_tab = None
+
+        if not target_tab:
+            QMessageBox.warning(self.app, "Warning", "No available tab to assign the image. Please select a tab.")
+            return
+
+        # Save image to chosen tab
+        try:
+            if stored_original is not None:
+                self.app.tab_mgr.save_tab_image(target_tab, stored_original, stored_cropped)
+            else:
+                self.app.tab_mgr.save_tab_image(target_tab, stored_cropped, stored_cropped)
+        except Exception as e:
+            self.app.gui_log(f"Failed to save image to tab {target_tab}: {e}")
+
+        # If target is currently visible tab, show preview and emit signal so main handler updates widgets
+        try:
+            current_tab = self.app.tab_mgr.get_selected_tab_name()
+        except Exception:
+            current_tab = None
+
+        if current_tab and current_tab == target_tab:
+            self.display_image_preview(self.app.loaded_image)
+            if substats or main_stat:
+                self.ocr_completed.emit(substats, log_messages, main_stat)
+            else:
+                self.app.gui_log("Image saved to current tab (no OCR results).")
+        else:
+            # Prefer to switch the UI to the target tab so the user can observe input
+            try:
+                switched = False
+                try:
+                    if hasattr(self.app, 'select_tab_by_internal_name'):
+                        switched = self.app.select_tab_by_internal_name(target_tab)
+                    else:
+                        # Fallback mapping using TAB_CONFIGS
+                        from constants import TAB_CONFIGS
+                        config_key = self.app.current_config_key
+                        if config_key in TAB_CONFIGS and target_tab in TAB_CONFIGS[config_key]:
+                            idx = TAB_CONFIGS[config_key].index(target_tab)
+                            if hasattr(self.app, 'notebook') and self.app.notebook is not None and 0 <= idx < self.app.notebook.count():
+                                self.app.notebook.setCurrentIndex(idx)
+                                switched = True
+                except Exception:
+                    switched = False
+
+                if switched:
+                    # Show preview and emit so main handler will populate the now-active tab
+                    self.display_image_preview(self.app.loaded_image)
+                    if substats or main_stat:
+                        self.ocr_completed.emit(substats, log_messages, main_stat)
+                    else:
+                        self.app.gui_log(f"Image assigned to tab: {target_tab} (no OCR results).")
+                else:
+                    # Fallback: populate the (possibly non-active) tab's widgets directly
+                    if substats or main_stat:
+                        self._populate_tab_data(target_tab, substats, main_stat)
+                        for m in log_messages:
+                            self.app.gui_log(m)
+                        self.app.gui_log(f"Successfully applied OCR results to tab: {target_tab}.")
+                    else:
+                        self.app.gui_log(f"Image assigned to tab: {target_tab} (no OCR results).")
+            except Exception as e:
+                self.app.gui_log(f"Failed to populate or switch to tab {target_tab}: {e}")
     
     def display_image_preview(self, image: Any) -> None:
         """Update the image preview label."""
