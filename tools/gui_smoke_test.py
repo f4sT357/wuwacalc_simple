@@ -7,13 +7,21 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from wuwacalc17 import ScoreCalculatorApp
+# Import moved into `run()` to ensure QApplication exists before any QWidget creation
 
 logging.basicConfig(level=logging.INFO)
 
 def run():
-    QApplication(sys.argv)
-    window = ScoreCalculatorApp()
+    # Keep a reference to the QApplication to avoid GC
+    _qt_app = QApplication(sys.argv)  # noqa: F841
+    # Import after QApplication to avoid QWidget-before-QApplication
+    from wuwacalc17 import ScoreCalculatorApp
+    try:
+        window = ScoreCalculatorApp()
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        raise
     # Do not show window; exercise non-interactive flows
     try:
         window._load_character_profiles()

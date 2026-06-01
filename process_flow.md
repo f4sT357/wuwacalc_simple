@@ -242,3 +242,62 @@ UI項目変更検知 (言語、キャラ、コスト設定、クロップパー�
 *   **バグの温床**:
     *   `notebook.blockSignals(True)` によるシグナルの一時遮断が一部でも漏れた場合、`currentChanged` などのシグナルが再帰的にトリガーされ、意図しないデータ復元処理（`show_tab_result` 等）が走り値がクリアされる、あるいは無限ループに陥る危険があります。
 *   **対策**: UI の再構築処理（タブ更新、言語切り替え、キャラ選択初期化）の開始直後と終了直後には、必ず関連ウィジェットの `blockSignals` をペアで実行し、割り込みを防ぐ必要があります。
+
+### 6.6 重複定義による上書きと不整合
+
+- **現象**: `wuwacalc17.py` 内に同一のメソッド名が複数箇所で定義されており、後から読み込まれた定義が前の定義を上書きします（例: `update_background_image` / `update_background_opacity` / `update_text_color` など）。参照: [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L187-L203), [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L395-L411), [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L602-L623)
+- **影響**: どの実装が実行されるかが不明瞭になり、片方を修正してももう片方の定義次第で修正が反映されない。保守性の低下とバグの温床。
+- **対策**: メソッド実装を一箇所に統合し、意図した箇所（`ui_components.py` か `ScoreCalculatorApp`）にのみ配置する。起動時チェックで重複定義を検出する簡易スクリプトを導入することも有効。
+
+### 6.7 広範な例外捕捉（`except Exception` / bare `except`）とログ不足
+
+- **現象**: 多数の `except Exception:` や bare `except:` ブロックが存在し、例外の種類やスタックトレースが埋もれるケースが見られます（例: [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L218)、[wuwacalc17.py](wuwacalc17.py#L32)、[config_manager.py](config_manager.py#L208)）。
+- **影響**: 根本原因の特定が困難になり、リソース解放や再試行など適切なエラー処理が行われない恐れがあります。
+- **対策**: 可能な限り具体的な例外クラスを捕捉し、最低限 `logger.exception(...)`（または `exc_info=True`）でフルスタックトレースを残す。ユーザー向けにはわかりやすいメッセージを出し、内部では詳細ログを取る運用にする。
+
+### 6.8 起動時の致命例外処理（GUI ダイアログ表示の安全性）
+
+- **現象**: `__main__` の致命的例外ハンドラで `QMessageBox` を直接表示していますが、`QApplication` の生成に失敗している場合などはここでさらに例外が発生する可能性があります（参照: [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L736-L751)）。
+- **影響**: 起動時エラーが発生した際に二重例外となり、ログが残らなかったりプロセスが不安定になる恐れがあります。
+- **対策**: GUI ダイアログ表示前に `QApplication.instance()` をチェックし、存在しない場合は標準エラー出力やログへの記録にフォールバックする。起動中の致命例外はまずログへ記録することを優先する。
+
+
+### 6.6 重複定義による上書きリスク
+
+*   **課題**: `ScoreCalculatorApp` 内の設定更新系メソッド（例: `update_background_image` / `update_background_opacity` / `update_text_color` など）がファイル内で複数回定義されており、後の定義が前の定義を上書きします。
+*   **実例**:
+    - [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L176-L203)
+    - [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L388-L411)
+    - [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L592-L623)
+*   **影響**: 意図しない振る舞い（どの実装が実行されるか混乱）、保守性低下、後から追加した処理が無効化されるリスクがあります。
+*   **対策**: 1箇所に実装を集約する（`UIComponents` または `ScoreCalculatorApp` のいずれか明確に）か、各メソッドを内部で共通ヘルパへ委譲して重複を排除する。
+
+### 6.7 広範囲な例外捕捉で原因が隠れる問題
+
+*   **課題**: プロジェクト内に多数の `except Exception:` や bare `except:` が存在します（例: 複数箇所で確認）。例外を捕捉しているもののスタックトレースがログへ残らない/表示されない場合、根本原因の特定が困難になります。
+*   **実例**:
+    - [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L218-L236)
+    - [wuwacalc17.py](wuwacalc17.py#L32-L36)
+    - [config_manager.py](config_manager.py#L208-L212)
+*   **影響**: バグの再現・修正が難しくなり、不具合を潜在化させる危険があります。
+*   **対策**:
+    - 可能な限り具体的な例外（`ValueError`, `IOError`, `OSError`, `ImportError` 等）を捕捉する。
+    - どうしても広範囲に捕捉する場合は `logger.exception(...)` を使い `exc_info=True` 相当でスタックトレースを必ず残す。
+    - ユーザーへ通知する際は、内部ログ（ファイル）とユーザー向け簡潔メッセージを分離する。
+
+### 6.8 起動時の致命例外ハンドリングに関する注意
+
+*   **課題**: `__main__` の起動時例外ハンドラで `QMessageBox` を呼ぶ実装があり、`QApplication` の生成に失敗している状況では逆に例外を投げる可能性があります。
+*   **実例**: [backup_before_refactor/wuwacalc17.py](backup_before_refactor/wuwacalc17.py#L736-L751)
+*   **影響**: 既に起動失敗している状況で GUI を表示しようとしてさらにクラッシュする、もしくはヘッドレス環境でログが出力されない等の問題が発生します。
+*   **対策**:
+    - まずは `logging.critical(...)` 等でログファイルへ出力し、`QApplication.instance()` が存在する場合のみ `QMessageBox` を表示する。
+    - CI/ヘッドレス環境ではコンソール出力やログファイルを最優先とする。
+
+### 6.9 まとめと推奨優先度
+
+1. 重複定義の統合（必須） — 保守性と予測可能性のため最優先で対応してください。  
+2. 例外ハンドリングの見直し（高） — `logger.exception` を使ったスタックトレースの保存を徹底してください。  
+3. 起動時例外の安全化（中） — GUI 非依存のフォールバックを追加してください。
+
+必要ならこれらの修正点を自動でパッチ化して pull request 用の差分を作成します。

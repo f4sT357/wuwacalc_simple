@@ -1463,12 +1463,6 @@ class ScoreCalculatorApp(QMainWindow):
         self.calc_mode_button_group.setExclusive(True)
 
         settings_layout.addWidget(calc_container, 2, 1, 1, 3)
-        # Ensure calc-mode radio buttons are exclusive only within calc group
-        self.calc_mode_button_group = QButtonGroup(self)
-        self.calc_mode_button_group.addButton(self.rb_batch, 0)
-        self.calc_mode_button_group.addButton(self.rb_single, 1)
-        self.calc_mode_button_group.setExclusive(True)
-        settings_layout.addLayout(calc_mode_layout, 2, 1, 1, 3)
 
         # Row 3: Calculation Methods Selection
         self.lbl_calc_methods = QLabel(self.tr("calc_methods"))
