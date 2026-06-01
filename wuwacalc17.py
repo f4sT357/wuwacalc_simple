@@ -1562,6 +1562,10 @@ class ScoreCalculatorApp(QMainWindow):
                             j = json.load(f)
                         en = j.get('character') or j.get('EN') or j.get('internal') or os.path.splitext(fname)[0].replace('_character', '')
                         jp = j.get('character_jp') or j.get('JP') or j.get('name') or en
+                        # 再起動後もマッピングが有効になるよう constants の辞書へ書き戻す
+                        from constants import _CHAR_NAME_MAP_JP_TO_EN, _CHAR_NAME_MAP_EN_TO_JP
+                        _CHAR_NAME_MAP_JP_TO_EN[jp] = en
+                        _CHAR_NAME_MAP_EN_TO_JP[en] = jp
                         items_to_add.append((self.tr(jp), en))
                         config_map[en] = j.get('config') or self.current_config_key
                         self.logger.info("DEBUG: _load_character_profiles - Processing file: %s", fname)

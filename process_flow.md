@@ -1,238 +1,244 @@
 # Wuthering Waves Echo Score Calculator — プロセスフロー
 
-## ファイル構成
+## 1. ファイル構成とアーキテクチャ
+
+`wuwacalc_simple` は、PyQt6 をベースにしたエコーのスコア計算ツールです。
+バージョン17（`wuwacalc17.py`）ではモジュール化（リファクタリング）が行われ、コアロジックを別ファイルに分離しつつ、欠落時のフォールバックとして `wuwacalc17.py` 内に統合された代替メソッド（Consolidated methods）を持つ堅牢な二重構造を採用しています。
 
 ```
 wuwacalc_simple/
-├── wuwacalc17.py              # メインアプリ (ScoreCalculatorApp クラス)
+├── wuwacalc17.py              # メインアプリケーション (QMainWindow: ScoreCalculatorApp, ScoreCalculator)
 ├── config_manager.py          # 設定管理 (ConfigManager / AppConfig / UIConfig)
-├── constants.py               # 定数・キャラクターデータ・テーマ色
-├── dialogs.py                 # ダイアログ (CharSetting / Crop / DisplaySettings)
-├── echo_data.py               # エコーデータ・スコア計算ロジック (EchoData)
-├── utils.py                   # ユーティリティ (パス取得・画像クロップ・Tesseract設定)
-├── languages.py               # 多言語翻訳辞書 (TRANSLATIONS)
-├── config.json                # ユーザー設定 (永続化)
-└── character_settings_jsons/  # キャラクター別設定ファイル (*_character.json)
+├── constants.py               # 定数・キャラクターデータ・テーマカラー・初期データ
+├── dialogs.py                 # 各種ダイアログ (CharSettingDialog / CropDialog / DisplaySettingsDialog)
+├── echo_data.py               # エコーデータモデル・複数方式のスコア計算ロジック (EchoData)
+├── ui_components.py           # UI構造定義 (UIComponents)
+├── utils.py                   # 共通ユーティリティ (画像クロップ、Tesseract設定、パス解決)
+├── languages.py               # 多言語翻訳辞書 (TRANSLATIONS ja/en/zh-TW)
+├── config.json                # 永続化されたユーザー設定
+├── character_settings_jsons/  # キャラクター別の個別設定ファイル (*_character.json)
+└── backup_before_refactor/    # リファクタリング前のモジュール群 (フォールバック読み込み先)
+    ├── app_logic.py
+    ├── image_processor.py
+    ├── tab_manager.py
+    ├── score_calculator.py
+    └── ...
 ```
 
 ---
 
-## 起動フロー
+## 2. 起動フロー
+
+アプリケーション起動時の初期化およびセットアップシーケンスです。
 
 ```
 main()
  └─ QApplication 生成
      └─ ScoreCalculatorApp.__init__()
-         ├─ _init_config()          # ConfigManager.load() → AppConfig / UIConfig 復元
-         ├─ _init_vars()            # UI変数初期化 (画像・タブ・キャラ名など)
-         ├─ apply_theme()           # テーマ適用 (light / dark / clear)
-         ├─ create_main_layout()    # UIウィジェット生成 (左右ペイン)
-         └─ QTimer.singleShot(100, _post_init_setup)
-              ├─ update_tabs()              # コスト設定に応じたタブ再構築
-              ├─ update_ui_mode()          # OCR / 手入力モード切替
-              ├─ _load_character_profiles() # JSONからキャラ読み込み
-              ├─ _filter_characters_by_config() # コンボボックス絞り込み
-              └─ _check_and_alert_environment() # Tesseract確認
+         ├─ _init_config()               # 設定のロード (config.json)
+         ├─ _init_vars()                 # UI制御用変数の初期化、画像プレビュー用キャッシュ生成
+         ├─ QTimer の初期化 (保存デバウンス用、クロッププレビュー用、リサイズ用)
+         ├─ モジュール読み込みの試行 (AppLogic, ImageProcessor, TabManager)
+         │   └─ カレントディレクトリにない場合、`backup_before_refactor` からインポート (フォールバック)
+         ├─ UIComponents / ScoreCalculator のインスタンス化
+         ├─ ui_manager.create_main_layout()  # ウィジェット配置とレイアウト組み立て
+         └─ QTimer.singleShot(100, _post_init_setup)  # 100ms 後に非同期実行
+              ├─ update_tabs()                    # タブの生成 (コスト設定に応じた再構築)
+              ├─ update_ui_mode()                 # 入力モード (OCR / 手入力) に応じた画像枠表示切替
+              ├─ _load_character_profiles()      # JSONファイル群からキャラクタープロファイルをロード
+              ├─ _filter_characters_by_config()   # 現在のコスト設定に対応するキャラをコンボボックスへ抽出
+              ├─ _check_and_alert_environment()   # Pillow / Tesseract OCR 動作環境の動作可否判定
+              └─ 初期キャラクター選択の適用 または メメインスタッツの自動入力 (on_character_change / _apply_character_main_stats)
 ```
 
 ---
 
-## UI構造
+## 3. UI 構造
+
+メインウィンドウ（`QMainWindow`）内のウィジェット階層およびレイアウト構成です。
 
 ```
-QMainWindow (ScoreCalculatorApp)
-└─ main_widget (QWidget)
-    └─ main_splitter (QSplitter / Horizontal)
-        ├─ 左ペイン
-        │   ├─ settings_group (基本設定)
-        │   │   ├─ config_combo     : コスト構成選択 (43311 / 44111)
-        │   │   ├─ charcombo        : キャラクター選択
-        │   │   ├─ lang_combo       : 言語選択 (ja / en / zh-TW)
-        │   │   ├─ rb_manual / rb_ocr : 入力モード
-        │   │   ├─ cb_auto_main     : メイン武器自動入力
-        │   │   ├─ rb_batch / rb_single : 計算モード
-        │   │   └─ cb_method_* (5個) : 計算手法チェックボックス
-        │   ├─ button_frame (操作ボタン)
-        │   │   ├─ 計算・エクスポート・全クリア・タブクリア
-        │   │   └─ キャラ設定・ヘルプ・表示設定
-        │   ├─ notebook (QTabWidget)
-        │   │   └─ タブ×n枚 (コスト別エコー)
-        │   │       ├─ main_stat_combo (メインステ選択)
-        │   │       └─ sub_entries ×5 (サブステ + 数値入力)
-        │   └─ result_group (計算結果 QTextEdit)
-        └─ 右ペイン (QSplitter / Vertical)
-            ├─ image_frame (OCRイメージ領域)
-            │   ├─ btn_load / btn_paste / btn_crop
-            │   ├─ クロップモード設定 (drag / percent)
-            │   └─ image_label (プレビュー)
-            └─ log_group (ログ QTextEdit)
+ScoreCalculatorApp (QMainWindow)
+└─ centralWidget (ui_manager.main_widget)
+    └─ main_splitter (QSplitter / 横分割)
+        ├─ 左ペイン (QWidget)
+        │   ├─ settings_group (QGroupBox: 基本設定)
+        │   │   ├─ コスト構成選択 (QComboBox: 43311 / 44111 など)
+        │   │   ├─ キャラクター選択 (QComboBox)
+        │   │   ├─ 言語選択 (QComboBox: ja / en / zh-TW)
+        │   │   ├─ 入力モード (QRadioButton: 手入力 / OCR) -> QButtonGroup で排他制御
+        │   │   ├─ メメインスタッツ自動入力 (QCheckBox)
+        │   │   ├─ 計算モード (QRadioButton: 全一括 / 選択タブのみ) -> QButtonGroup で排他制御
+        │   │   └─ 計算手法 (QCheckBox×5: 正規化、比率、ロール品質、有効数、CV値)
+        │   ├─ button_frame (QFrame: アクションボタン一覧)
+        │   │   ├─ 計算 (score_calc.calculate_all_scores)
+        │   │   ├─ テキスト出力 (export_result_to_txt)
+        │   │   ├─ 全クリア (clear_all)
+        │   │   ├─ タブクリア (clear_current_tab)
+        │   │   ├─ キャラ設定 (opencharsetting)
+        │   │   ├─ ヘルプ (README.html 表示)
+        │   │   └─ 表示設定 (DisplaySettingsDialog 表示)
+        │   ├─ notebook (QTabWidget: コスト別エコー入力タブ群)
+        │   │   └─ 各タブ (QWidget)
+        │   │       ├─ メメインスタッツ選択 (QComboBox)
+        │   │       └─ サブスタッツ入力行 (QComboBox + QLineEdit) × 5組
+        │   └─ result_group (QGroupBox: 計算結果表示)
+        │       └─ result_text (QTextEdit / 読取専用)
+        └─ 右ペイン (QSplitter / 縦分割)
+            ├─ image_container (QWidget: OCR画像エリア)
+            │   └─ image_frame (QGroupBox: OCRイメージ)
+            │       ├─ 操作ボタン (画像読み込み / クリップボード貼り付け / クロップ実行)
+            │       ├─ クロップモード (QRadioButton: ドラッグ / パーセント)
+            │       ├─ クロップ座標指定 (QLineEdit: Top% / Right%) -> 入力時に自動プレビュー
+            │       └─ image_label (QLabel: QScrollArea内に配置されプレビューを表示)
+            └─ log_group (QGroupBox: ログ出力エリア)
+                └─ log_text (QTextEdit / 読取専用)
 ```
 
 ---
 
-## 主要処理フロー
+## 4. 主要処理フロー
 
-### 1. 画像入力 → OCR → サブステ自動入力
+### 4.1 画像読み込み・リアルタイムクロップ・OCR自動入力
+
+OCR モードにおいて、ユーザーが画像をインポートしてからエコーのサブスタッツが自動入力されるまでのプロセスです。
 
 ```
-[ユーザー操作]
- load_image / paste_clipboard
-     └─ process_loaded_image()
-         ├─ original_image 保持
-         └─ apply_cropped_image()
-             ├─ save_tab_image()          # タブに画像を紐付け
-             ├─ display_image_preview()   # プレビュー表示
-             └─ _perform_ocr()
-                 ├─ _preprocess_for_ocr() # グレースケール・コントラスト強調・二値化
-                 ├─ pytesseract.image_to_string (jpn+eng)
-                 └─ parse_substats_from_ocr()
-                     └─ on_ocr_completed()
-                         └─ sub_entries に自動入力
+【画像入力】
+ユーザー操作 (画像読込 / クリップボード貼付)
+ └─ ImageProcessor.import_image() / paste_from_clipboard()
+     ├─ original_image (元画像) を保持
+     └─ クロップ処理へ
 
-[クロップ操作]
- perform_crop()
-     ├─ percent モード → apply_percent_crop()
-     └─ drag モード   → open_crop_dialog() → CropDialog
+【リアルタイムクロップ (UX重視)】
+ユーザーが Top% / Right% の数値を変更
+ ├─ on_crop_percent_change()
+ ├─ save_config() (自動保存の開始)
+ └─ schedule_crop_preview() (100msデバウンスタイマー始動)
+     └─ _update_crop_preview()
+         ├─ crop_image_by_percent(original_image, top, right)
+         └─ display_image_preview()  -> クロップ範囲が画像ラベルへリアルタイムに視覚反映される
+
+【クロップの確定 & タブへの紐付け】
+perform_crop() またはパーセント入力確定
+ └─ apply_cropped_image(cropped_img)
+     ├─ プレビュー表示を更新
+     ├─ 選択中のタブがある場合: save_tab_image() でタブごとに画像を保存
+     │   └─ タブ切り替え時 (on_tab_changed) に保存された画像が自動で復元表示される
+     └─ なし: 警告ログを出力し、タブ選択を促す
+
+【OCR実行】
+ImageProcessor / pytesseract OCR 解析
+ ├─ _preprocess_for_ocr() (グレースケール化、コントラスト強調、二値化などの高精度化)
+ ├─ Tesseract OCR 実行 (jpn+eng 言語指定)
+ └─ parse_substats_from_ocr() -> on_ocr_completed()
+     ├─ メメインスタッツが自動検出された場合、自動入力 (auto_apply_main_stats がONの場合)
+     └─ 検出されたサブスタッツの名称と数値を、現在タブの 5つの入力フィールドへ自動流し込み
 ```
 
-### 2. スコア計算
+### 4.2 スコア計算フロー
+
+`ScoreCalculator` によるスコア算出プロセスです。
 
 ```
 calculate_all_scores()
-    ├─ score_mode == "single"
-    │   └─ calculate_single_score()
-    │       ├─ extract_substats()       # UI入力 → {stat: value} dict
-    │       ├─ EchoData 生成
-    │       └─ echo.evaluate_comprehensive(weights, enabled_methods)
-    │           ├─ calculate_score_normalized()   # 正規化スコア
-    │           ├─ calculate_score_ratio_based()  # 比率スコア
-    │           ├─ calculate_score_roll_quality() # ロール品質
-    │           ├─ calculate_score_effective_stats() # 有効数スコア
-    │           └─ calculate_score_cv_based()     # CVスコア
-    │
-    └─ score_mode == "batch"
-        └─ calculate_batch_scores()
-            └─ 全タブを順にスコア計算 → HTML出力
+ ├─ 計算対象タブの決定 (score_mode_var に従う)
+ │   ├─ 'single': 現在選択されているタブのみデータを収集
+ │   └─ 'batch' (デフォルト): すべてのタブのデータを収集
+ │
+ ├─ タブデータの収集・クレンジング (_collect_tab_data)
+ │   ├─ 各サブスタッツ入力行の名称と値を取得
+ │   └─ _parse_numeric() による柔軟な数値抽出
+ │       └─ 全角「％」の半角化、カンマ「,」のドット「.」変換、数値トークンの正規表現抽出
+ │
+ ├─ キャラクターの重み (Weights) の取得
+ │   └─ 選択キャラクターに対応するステータス重みを取得 (存在しない場合は 'General')
+ │
+ ├─ 計算処理の実装 (calculate_batch_scores / calculate_single_score)
+ │   └─ 収集されたサブスタッツの「値 × 重み」の積和計算 (Weighted-Sum)
+ │       └─ score = Sum(parsed_value * weight)
+ │
+ └─ 結果の表示
+     └─ 収集された結果を結果テキストエリア (result_text) に出力表示する
 ```
 
-### 3. 設定の保存・読み込み
+> [!NOTE]
+> `echo_data.py` に定義された `EchoData` クラスには、正規化スコア・比率スコア・ロール品質・有効数・CV値など複数の計算メソッドおよび総合評価（SSS〜C）を出力するロジックが実装されています。現在の `wuwacalc17.py` 内の `ScoreCalculator` は、入力された数値の確実なパースと積和によるスコア算出を優先したシンプルな設計になっています。
+
+### 4.3 設定の自動保存 (デバウンス保存)
+
+UI 上の設定変更が即座に、かつディスク負荷をかけずに保存される仕組みです。
 
 ```
-[変更検知] → save_config()
-    └─ _save_timer.start(500ms) ← デバウンス
-        └─ actual_save_config()
-            ├─ config_manager.update_app_setting(key, value) × 各設定
-            └─ config_manager.save() → config.json に書き出し
-
-[起動時] → ConfigManager.load()
-    └─ AppConfig.from_dict() → validate() → 各フィールドに復元
-```
-
-### 4. キャラクター管理
-
-```
-[登録] opencharsetting()
-    └─ CharSettingDialog
-        └─ on_save_char()
-            └─ register_char(name_jp, name_en, costkey, mainstats, weights)
-                ├─ CHARACTER_STAT_WEIGHTS / CHARACTER_MAIN_STATS 更新
-                ├─ _apply_character_main_stats()
-                └─ _save_character_profile() → character_settings_jsons/*.json
-
-[読み込み] _load_character_profiles()
-    └─ character_settings_jsons/ をスキャン
-        └─ JSON → CHARACTER_STAT_WEIGHTS / CHARACTER_MAIN_STATS に反映
-            └─ _update_char_combobox()
-
-[フィルタ] _filter_characters_by_config()
-    └─ 現在のコスト構成に対応するキャラのみ表示
+UI項目変更検知 (言語、キャラ、コスト設定、クロップパーセント等)
+ └─ save_config() を呼び出し
+     └─ _save_timer.start(500)  # 500msのデバウンスタイマー作動
+         └─ タイマー満了時 -> actual_save_config() を実行
+             ├─ メモリ上の変数を ConfigManager へ書き戻し
+             └─ ConfigManager.save() が実行され、config.json へ永続化
 ```
 
 ---
 
-## EchoData クラス（スコア計算詳細）
+## 5. 多言語対応とテーマ設計
 
-| メソッド | 説明 |
-|---|---|
-| `calculate_score_normalized()` | サブステを最大値で正規化し重みを乗算 (0-100点) |
-| `calculate_score_ratio_based()` | 比率×重要度の合算 (Keisan方式) |
-| `calculate_score_roll_quality()` | ロール品質 (Max/Good/Low) を点数化 |
-| `calculate_score_effective_stats()` | 有効サブステ数のボーナス付きスコア |
-| `calculate_score_cv_based()` | CV値ベース (クリ率×2 + クリダメ + 他) |
-| `evaluate_comprehensive()` | 有効メソッドの平均スコア + レーティング |
+### 5.1 多言語対応 (Multi-Language)
 
----
+- `languages.py` に定義された辞書 `TRANSLATIONS` を利用。
+- `ja` (日本語)、`en` (英語)、`zh-TW` (繁体字中国語) に対応。
+- `self.tr(key)` メソッドにより、現在設定されている言語の文字列を検索・置換します。該当する翻訳キーがない場合は日本語 `ja` から補完され、それでもない場合はキー文字列自体が返るセーフティ設計です。
+- 言語切り替え時は、`retranslate_ui()` によって全ラベル・プレースホルダーおよび動的に生成されたタブのラベル名が即座に再翻訳・再描画されます。
 
-## 設定データ構造 (config.json)
+### 5.2 テーマとカスタム表示 (Themes & Style)
 
-```json
-{
-  "language": "ja",
-  "crop_mode": "percent",
-  "crop_top_percent": 35.0,
-  "crop_right_percent": 25.0,
-  "current_config_key": "43311",
-  "character_var": "Changli",
-  "mode_var": "ocr",
-  "score_mode_var": "batch",
-  "auto_apply_main_stats": true,
-  "enabled_calc_methods": {
-    "normalized": true, "ratio": true, "roll": true,
-    "effective": true, "cv": true
-  },
-  "theme": "dark",
-  "text_color": "#ffffff",
-  "background_image": "",
-  "background_opacity": 0.9,
-  "custom_input_bg_color": "",
-  "app_font": "",
-  "ui": {
-    "window_width": 1000,
-    "window_height": 950,
-    "image_preview_max_width": 600,
-    "image_preview_max_height": 260
-  }
-}
-```
+- `THEME_COLORS` に基づき、`light` / `dark` / `clear` の3種類のテーマをサポート。
+- ユーザー設定ダイアログ (`DisplaySettingsDialog`) を介して以下の項目をカスタマイズ可能：
+  - テキストカラー
+  - 背景画像 (ローカルファイルパス)
+  - 背景画像の不透明度 (Opacity)
+  - 入力欄の背景色
+  - アプリケーション全体のフォントファミリー
+- 設定変更時は `apply_theme()` が即座に走り、QStyle の "Fusion" スタイルシートをベースに、CSS（RGBA、背景画像ブレンド、フォント指定等）を動的生成してアプリケーション全体に適用します。
 
 ---
 
-## クロップ設定フロー（UX重点）
+## 6. バグ・障害が発生しやすい設計・実装上の注意点
 
-```
-[percent モード]
-  entry_top_p / entry_right_p 変更
-      └─ on_crop_percent_change()
-          ├─ crop_top/right_percent_var 更新
-          ├─ save_config()
-          └─ schedule_crop_preview()  ← 100ms デバウンス
-              └─ perform_crop_preview()
-                  └─ display_image_preview(クロップ済み)  ← リアルタイムプレビュー
+本プロジェクトのコードベース（特に `wuwacalc17.py` や `ui_components.py`）を保守・改修する際、バグを引き起こしやすい脆弱な実装パターンや潜在的な不具合についてまとめます。
 
-[drag モード]
-  perform_crop() → open_crop_dialog()
-      └─ CropDialog (ラバーバンド選択)
-          └─ OK → 座標変換 → apply_cropped_image()
-```
+### 6.1 デッドコード（使われないフォールバックコード）と構文エラーの放置
 
----
+*   **課題**: `wuwacalc17.py` の後半部分には、モジュール化に伴い `ui_components.py` に移行したはずの UI 構築メソッド群（`create_settings_frame` など）が「フォールバック用の複製コード」として残されています。
+*   **バグの温床**:
+    *   開発者が `wuwacalc17.py` 内の UI 定義コードを書き換えても、実行時には `ui_components.py` が優先してインポートされるため、**変更が一切反映されない** という混乱が生じます。
+    *   さらに、`wuwacalc17.py` 内の `create_settings_frame` メソッド（1471行目付近）において、定義されていない変数 `calc_mode_layout` を使用している箇所（`settings_layout.addLayout(calc_mode_layout, ...)`）があり、**万が一フォールバックコードが実行されると実行時エラー（NameError）でクラッシュします。**
+*   **対策**: 保守時は、実際の描画ロジックが `ui_components.py` 側にあることを常に意識し、フォールバック用デッドコードの不要な変更や依存を避ける必要があります。
 
-## 多言語対応
+### 6.2 デバウンス保存の「強制クローズ時」におけるデータ未保存
 
-- `languages.py` の `TRANSLATIONS` 辞書に `ja / en / zh-TW` を格納
-- `self.tr(key)` で現在言語の文字列を取得、フォールバックは `ja`
-- `retranslate_ui()` で全ウィジェットテキストを再設定
-- `update_tabs()` でタブラベルも再翻訳
+*   **課題**: 設定変更時の `save_config()` は、ディスク負荷軽減のために `QTimer` を用いた 500ms のデバウンス（遅延保存）を行っています。
+*   **バグの温床**:
+    *   ユーザーがラジオボタンの切り替えや入力値の変更を行った直後（500ms未満）にアプリケーションの閉じる「×」ボタンを押して強制終了した場合、`QTimer` が破棄されるため `actual_save_config()` が呼び出されず、**直前の変更内容が config.json に保存されません。**
+*   **対策**: `ScoreCalculatorApp` クラスに `closeEvent(self, event)` をオーバーライドし、閉じる直前にタイマーがアクティブであれば強制的に `actual_save_config()` を実行する処理を追加することが推奨されます。
 
----
+### 6.3 OCR数値抽出における誤検知（`_parse_numeric` の位置依存）
 
-## テーマ
+*   **課題**: `ScoreCalculator._parse_numeric(text)` は、正規表現 `re.search(r'[-+]?\d+[\.,]?\d*', s)` を用いて文字列から最初に見つかった数値を抽出します。
+*   **バグの温床**:
+    *   OCR の読み取り結果に「行番号」や「ノイズ数値」（例: `"2 クリティカル率 9.3%"` など）が混入した場合、最初に見つかる数値 `"2"` がステータス値として誤抽出されてしまいます。
+*   **対策**: OCR 入力文字列をパースする際、ステータス名（エイリアス）と数値の位置関係を厳密に考慮したパースロジックへアップグレードするか、数値トークンが妥当なエコーのサブスタッツ範囲内か検証するバリデーションが必要です。
 
-| テーマ | 概要 |
-|---|---|
-| `light` | 明るい背景 (#f0f0f0) |
-| `dark` | 暗い背景 (#2e2e2e) |
-| `clear` | 水色系背景 (#eefeff) |
+### 6.4 動的なキャラクターマッピングの永続化漏れ
 
-- `DisplaySettingsDialog` でテキスト色・背景画像・不透明度・フォントを変更可能
-- 設定は即時 `apply_theme()` に反映、`config.json` に保存
+*   **課題**: `register_char` にて新規キャラクターが登録されると、`constants.py` のインメモリ辞書 `_CHAR_NAME_MAP_JP_TO_EN` などに動的に追加されます。
+*   **バグの温床**:
+    *   これらのマッピング情報は**メモリ上にのみ保持され、`config.json` や定数ファイルへは直接保存されません。**
+    *   アプリ再起動時には、`character_settings_jsons` に保存された個別プロファイルファイルを毎回スキャンしてインメモリ辞書を再構築する設計（`_load_character_profiles`）になっているため、JSON ファイルの手動削除や読み込み失敗が起きると、マッピングが完全に破損します。
+*   **対策**: 動的マッピングを追加する際、プロファイルの整合性をチェックするバリデーションロジックを強化する必要があります。
+
+### 6.5 タブ更新時の再帰シグナル発生（シグナル無限ループ）
+
+*   **課題**: `update_tabs` の処理中、ウィジェットの削除や作成が繰り返されるため、インデックスの変更イベントなどが引き金となり PyQt のシグナルが予期せぬタイミングで送信されます。
+*   **バグの温床**:
+    *   `notebook.blockSignals(True)` によるシグナルの一時遮断が一部でも漏れた場合、`currentChanged` などのシグナルが再帰的にトリガーされ、意図しないデータ復元処理（`show_tab_result` 等）が走り値がクリアされる、あるいは無限ループに陥る危険があります。
+*   **対策**: UI の再構築処理（タブ更新、言語切り替え、キャラ選択初期化）の開始直後と終了直後には、必ず関連ウィジェットの `blockSignals` をペアで実行し、割り込みを防ぐ必要があります。
