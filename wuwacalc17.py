@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     , QButtonGroup
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QPixmap, QColor, QPainter, QPen
+from PyQt6.QtGui import QPixmap
 try:
     from PIL import Image, ImageQt
     is_pil_installed = True
@@ -34,7 +34,7 @@ except Exception:
     is_pytesseract_installed = False
 
 # Utility helpers
-from utils import get_app_path, crop_image_by_percent, get_substat_display, setup_tesseract
+from utils import get_app_path, crop_image_by_percent, setup_tesseract
 
 from constants import (
     CHARACTER_MAIN_STATS,
@@ -42,18 +42,14 @@ from constants import (
     MAIN_STAT_OPTIONS,
     STAT_ALIASES,
     SUBSTAT_MAX_VALUES,
-    SUBSTAT_TYPES,
     TAB_CONFIGS,
     get_char_internal_name,
-    get_char_japanese_name,
     THEME_COLORS,
-    LOG_FILENAME,
     CONFIG_FILENAME,
 )
 
 from config_manager import ConfigManager
 from dialogs import CharSettingDialog, CropDialog, DisplaySettingsDialog
-from echo_data import EchoData
 from languages import TRANSLATIONS
 from ui_components import UIComponents
 
@@ -564,7 +560,6 @@ class ScoreCalculatorApp(QMainWindow):
                             self.gui_log(f"Detected main stat: {main_stat}")
                         else:
                             try:
-                                from constants import STAT_ALIASES
                                 applied = False
                                 for key, aliases in STAT_ALIASES.items():
                                     if main_stat == key or (isinstance(main_stat, str) and main_stat in aliases):
